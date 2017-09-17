@@ -263,15 +263,15 @@ Lit Solver::pickBranchLit()
             break;
         }else
             next = order_heap.removeMin();
-
+    
     // Choose polarity based on different polarity modes (global or per-variable):
     if (next == var_Undef)
         return lit_Undef;
-    else if (user_pol[next] != l_Undef)
+    else if (user_pol[next] != l_Undef)  
         return mkLit(next, user_pol[next] == l_True);
     else if (rnd_pol)
         return mkLit(next, drand(random_seed) < 0.5);
-    else
+    else 
         return mkLit(next, polarity[next]);
 }
 
@@ -779,6 +779,8 @@ lbool Solver::search(int nof_conflicts)
                 // New variable decision:
                 decisions++;
                 next = pickBranchLit();
+                // Comments by Fei, snap the state and mark the decision
+                if (var(next) >= 0) snapState(snapTo, assumptions, next); 
 
                 if (next == lit_Undef)
                     // Model found:
@@ -924,7 +926,7 @@ static Var mapVar(Var x, vec<Var>& map, Var& max)
     return map[x];
 }
 
-
+// Comments by Fei: this is to print a clause c
 void Solver::toDimacs(FILE* f, Clause& c, vec<Var>& map, Var& max)
 {
     if (satisfied(c)) return;
@@ -935,7 +937,7 @@ void Solver::toDimacs(FILE* f, Clause& c, vec<Var>& map, Var& max)
     fprintf(f, "0\n");
 }
 
-
+// Comments by Fei: this is to print into a filename (This is the top function that calls other toDimacs functions)
 void Solver::toDimacs(const char *file, const vec<Lit>& assumps)
 {
     FILE* f = fopen(file, "wr");
@@ -974,12 +976,12 @@ void Solver::toDimacs(FILE* f, const vec<Lit>& assumps)
     cnt += assumps.size();
 
     fprintf(f, "p cnf %d %d\n", max, cnt);
-
+    
     for (int i = 0; i < assumps.size(); i++){
         assert(value(assumps[i]) != l_False);
         fprintf(f, "%s%d 0\n", sign(assumps[i]) ? "-" : "", mapVar(var(assumps[i]), map, max)+1);
     }
-
+    
     for (int i = 0; i < clauses.size(); i++)
         toDimacs(f, ca[clauses[i]], map, max);
 
@@ -987,6 +989,97 @@ void Solver::toDimacs(FILE* f, const vec<Lit>& assumps)
         printf("Wrote DIMACS with %d variables and %d clauses.\n", max, cnt);
 }
 
+
+//=================================================================================================
+// saving a snap of the current state of the SAT problem (for supervised learning of variable decisions)
+// largely copied from toDimacs functions, but want a different name so that I can add more modifications to them later!
+
+// Comments by Fei: this is to print a clause c. 
+void Solver::snapState(FILE* f, Clause& c, vec<Var>& map, Var& max)
+{
+    if (satisfied(c)) return;
+
+    for (int i = 0; i < c.size(); i++)
+        if (value(c[i]) != l_False)
+            //fprintf(f, "%s%d ", sign(c[i]) ? "-" : "", mapVar(var(c[i]), map, max)+1);
+            fprintf(f, "%s%d ", sign(c[i]) ? "-" : "", var(c[i])+1);
+    fprintf(f, "0\n");
+}
+
+// Comments by Fei: mostly copied from toDimacs function (don't want to pollute the original implementation of toDimacs)
+void Solver::snapState(FILE* f, const vec<Lit>& assumps, const Lit next)
+{
+    // Handle case when solver is in contradictory state:
+    if (!ok){
+        fprintf(f, "c solver is in contradictory state!\n");
+        return; }
+
+    vec<Var> map; Var max = 0;
+
+    // Cannot use removeClauses here because it is not safe
+    // to deallocate them at this point. Could be improved.
+    int cnt = 0;
+    for (int i = 0; i < clauses.size(); i++)
+        if (!satisfied(ca[clauses[i]]))
+            cnt++;
+
+    // Comments by Fei: also track learnt clauses
+    for (int i = 0; i < learnts.size(); i++)
+        if (!satisfied(ca[learnts[i]]))
+            cnt++;
+    /* Comments by Fei: remapping the vars are smart, but it masses up the representation of my decision variables
+       I can pass the decision variables to this function, add use the same map, 
+       OR
+       use don't use the map at all. NOT sure which way is better
+    for (int i = 0; i < clauses.size(); i++)
+        if (!satisfied(ca[clauses[i]])){
+            Clause& c = ca[clauses[i]];
+            for (int j = 0; j < c.size(); j++)
+                if (value(c[j]) != l_False)
+                    mapVar(var(c[j]), map, max);
+        }
+
+    // Comments by Fei: also track variables in learnt clauses
+    for (int i = 0; i < learnts.size(); i++)
+        if (!satisfied(ca[learnts[i]])) {
+            Clause& c = ca[learnts[i]];
+            for (int j = 0; j < c.size(); j++)
+                if (value(c[j]) != l_False)
+                    mapVar(var(c[j]), map, max);
+        } */
+
+    // Assumptions are added as unit clauses:
+    cnt += assumps.size();
+
+    fprintf(f, "p cnf %d %d\n", next_var, cnt);
+    
+    fprintf(f, "%s\n", "c this is assumption clauses");
+    for (int i = 0; i < assumps.size(); i++){
+        assert(value(assumps[i]) != l_False);
+        //fprintf(f, "%s%d 0\n", sign(assumps[i]) ? "-" : "", mapVar(var(assumps[i]), map, max)+1);
+        fprintf(f, "%s%d 0\n", sign(assumps[i]) ? "-" : "", var(assumps[i])+1);
+    }
+    
+    fprintf(f, "%s\n", "c this is all unsatisfied current clauses");
+    for (int i = 0; i < clauses.size(); i++)
+        snapState(f, ca[clauses[i]], map, max);
+    
+    fprintf(f, "%s\n", "c this is all unsatisfied learnt clauses");
+    for (int i = 0; i < learnts.size(); i++)
+        snapState(f, ca[learnts[i]], map, max);
+
+    fprintf(f, "c pick %s%d\n", sign(next)? "-" : "", var(next)+1);
+}
+
+// Comments by Fei: entry point of snapState function, taking a filename and an assumptions list
+void Solver::snapState(const char *file, const vec<Lit>& assumps, const Lit next) {
+    // Comments by Fei: use append mode because we will write multiple states (and decision choices) to the same file
+    FILE* f = fopen(file, "a");
+    if (f == NULL)
+        fprintf(stderr, "could not open file for snapState %s\n", file), exit(1);
+    snapState(f, assumps, next);
+    fclose(f);
+}
 
 void Solver::printStats() const
 {

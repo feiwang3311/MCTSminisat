@@ -92,6 +92,9 @@ int main(int argc, char** argv)
         if (in == NULL)
             printf("ERROR! Could not open file: %s\n", argc == 1 ? "<stdin>" : argv[1]), exit(1);
         
+        // Comments by Fei: give a filename for snapTo (which is the filename of the input SAT problem concantenated with "snaps").
+        asprintf(&(S.snapTo), "%s%s", argv[1], "snaps");
+
         if (S.verbosity > 0){
             printf("============================[ Problem Statistics ]=============================\n");
             printf("|                                                                             |\n"); }

@@ -1,2 +1,5 @@
 config.mk
 build
+bin
+satProb
+MiniSat.pdf

@@ -79,6 +79,10 @@ public:
     void    toDimacs     (const char *file, const vec<Lit>& assumps);
     void    toDimacs     (FILE* f, Clause& c, vec<Var>& map, Var& max);
 
+    void    snapState     (FILE* f, const vec<Lit>& assumps, const Lit next);            // Comments by Fei: snap the state to file in DIMACS-format.
+    void    snapState     (const char *file, const vec<Lit>& assumps, const Lit next);
+    void    snapState     (FILE* f, Clause& c, vec<Var>& map, Var& max);
+
     // Convenience versions of 'toDimacs()':
     void    toDimacs     (const char* file);
     void    toDimacs     (const char* file, Lit p);
@@ -145,6 +149,7 @@ public:
 
     int       learntsize_adjust_start_confl;
     double    learntsize_adjust_inc;
+    char*     snapTo;             // Comments by Fei. this is the filename to write down snapState.
 
     // Statistics: (read-only member variable)
     //
