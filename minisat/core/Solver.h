@@ -150,6 +150,10 @@ public:
     int       learntsize_adjust_start_confl;
     double    learntsize_adjust_inc;
     char*     snapTo;             // Comments by Fei. this is the filename to write down snapState.
+    bool      env_hold;           // Comments by Fei. this is the for adapting solver to Reinforcement Learning environment. 
+                                  // Comments by Fei. When env_hold is true, the system is holding on the next decision variable!
+                                  // Comments by Fei. otherwise, the system is done (sat or unsat)
+    double    env_reward;         // Comments by Fei. This the variable that contains the reward of each step!
 
     // Statistics: (read-only member variable)
     //

@@ -699,12 +699,12 @@ bool Solver::simplify()
 |    all variables are decision variables, this means that the clause set is satisfiable. 'l_False'
 |    if the clause set is unsatisfiable. 'l_Undef' if the bound on number of conflicts is reached.
 |________________________________________________________________________________________________@*/
-lbool Solver::search(int nof_conflicts)
+lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a field!
 {
     assert(ok);
-    int         backtrack_level;
-    int         conflictC = 0;
-    vec<Lit>    learnt_clause;
+    int         backtrack_level; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
+    int         conflictC = 0; // Comments by Fei: new declaration! both this and nof_conflicts have to be fields!
+    vec<Lit>    learnt_clause; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
     starts++;
 
     for (;;){
@@ -780,7 +780,8 @@ lbool Solver::search(int nof_conflicts)
                 decisions++;
                 next = pickBranchLit();
                 // Comments by Fei, snap the state and mark the decision
-                if (var(next) >= 0) snapState(snapTo, assumptions, next); 
+                // Comments by Fei, should comment this out when adapting solver to reinforcement learning environment
+                // if (var(next) >= 0) snapState(snapTo, assumptions, next); 
 
                 if (next == lit_Undef)
                     // Model found:
@@ -852,7 +853,7 @@ lbool Solver::solve_()
 
     learntsize_adjust_confl   = learntsize_adjust_start_confl;
     learntsize_adjust_cnt     = (int)learntsize_adjust_confl;
-    lbool   status            = l_Undef;
+    lbool   status            = l_Undef; // Comments by Fei: new declaration! Logic around this variable should be rewritten!
 
     if (verbosity >= 1){
         printf("============================[ Search Statistics ]==============================\n");
@@ -862,12 +863,14 @@ lbool Solver::solve_()
     }
 
     // Search:
-    int curr_restarts = 0;
+    int curr_restarts = 0; // Comments by Fei: new declaration! We can make it a field! 
+    // Comments by Fei: need to precompute rest_base * restart_first, reset ConflictC as zero
     while (status == l_Undef){
-        double rest_base = luby_restart ? luby(restart_inc, curr_restarts) : pow(restart_inc, curr_restarts);
+        double rest_base = luby_restart ? luby(restart_inc, curr_restarts) : pow(restart_inc, curr_restarts); // Comments by Fei: new declaration!
         status = search(rest_base * restart_first);
         if (!withinBudget()) break;
         curr_restarts++;
+        // Comments by Fei: need to reset rest_base * restart_first, reset ConflictC as zero
     }
 
     if (verbosity >= 1)
@@ -1050,6 +1053,8 @@ void Solver::snapState(FILE* f, const vec<Lit>& assumps, const Lit next)
 
     // Assumptions are added as unit clauses:
     cnt += assumps.size();
+    // if the number of unsolved clause is not positive, simply return
+    if (cnt <= 0) return;
 
     fprintf(f, "p cnf %d %d\n", next_var, cnt);
     
