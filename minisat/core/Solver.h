@@ -154,6 +154,17 @@ public:
                                   // Comments by Fei. When env_hold is true, the system is holding on the next decision variable!
                                   // Comments by Fei. otherwise, the system is done (sat or unsat)
     double    env_reward;         // Comments by Fei. This the variable that contains the reward of each step!
+    int       current_restarts;   // Comments by Fei. This is to track how many restarts have we done. Adopted from a local variable in solve_()
+    int       number_of_conflicts;// Comments by Fei. This is to track how many conflicts are allowed in a given restart cycle. Adopted from the parameter of search()
+    int       conflictCounts;     // Comments by Fei. This is to track how many conflicts have generated for this given restart cycle. Adopted from the local variable in search()
+    Lit       agent_decision;     // Comments by Fei. This is to mark the decision of the agent. Should be set from the parameter of env.step(decision).
+    lbool     remember_status;    // Comments by Fei. This is to replace the local variable called "status" in solve_()
+    CRef      confl;              // Comments by Fei. This is to replace the local variable in search(). No change of name!
+    Lit       field_of_next;      // Comments by Fei. This is to replace the local variable in search().
+    vec<Var> extra_frozen;        // Comments by Fei. This is to replace the local variable in simple solve_().
+    lbool    result = l_True;     // Comments by Fei. This is to replace the local variable in simple solve_().
+    // Comments by Fei. This is short-circuit for pickBranchLit, so I can use it as public fuction
+    Lit default_pickLit() {return pickBranchLit();} 
 
     // Statistics: (read-only member variable)
     //
@@ -393,7 +404,7 @@ inline bool     Solver::solve         (Lit p)               { budgetOff(); assum
 inline bool     Solver::solve         (Lit p, Lit q)        { budgetOff(); assumptions.clear(); assumptions.push(p); assumptions.push(q); return solve_() == l_True; }
 inline bool     Solver::solve         (Lit p, Lit q, Lit r) { budgetOff(); assumptions.clear(); assumptions.push(p); assumptions.push(q); assumptions.push(r); return solve_() == l_True; }
 inline bool     Solver::solve         (const vec<Lit>& assumps){ budgetOff(); assumps.copyTo(assumptions); return solve_() == l_True; }
-inline lbool    Solver::solveLimited  (const vec<Lit>& assumps){ assumps.copyTo(assumptions); return solve_(); }
+inline lbool    Solver::solveLimited  (const vec<Lit>& assumps){ return solve_(); }
 inline bool     Solver::okay          ()      const   { return ok; }
 
 inline ClauseIterator Solver::clausesBegin() const { return ClauseIterator(ca, &clauses[0]); }

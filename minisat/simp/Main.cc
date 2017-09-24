@@ -136,7 +136,12 @@ int main(int argc, char** argv)
 
         if (solve){
             vec<Lit> dummy;
+            // Comments by Fei: Now the solveLimited() function really just initialize the problem. It needs steps to finish up!
             ret = S.solveLimited(dummy);
+            while (S.env_hold) { // Comments by Fei: SAT is not solved yet! it is on hold
+                S.agent_decision = S.default_pickLit(); // Comments by Fei: set up agent_decision (for now it is the same as pickBranchLit heuristics)
+                ret = S.step(); // this is doing one more step!
+            }
         }else if (S.verbosity > 0)
             printf("===============================================================================\n");
 
@@ -151,8 +156,8 @@ int main(int argc, char** argv)
             if (ret == l_True){
                 fprintf(res, "SAT\n");
                 for (int i = 0; i < S.nVars(); i++)
-                    if (S.model[i] != l_Undef)
-                        fprintf(res, "%s%s%d", (i==0)?"":" ", (S.model[i]==l_True)?"":"-", i+1);
+                    if (S.model[i] != l_Undef) {
+                        fprintf(res, "%s%s%d", (i==0)?"":" ", (S.model[i]==l_True)?"":"-", i+1);}
                 fprintf(res, " 0\n");
             }else if (ret == l_False)
                 fprintf(res, "UNSAT\n");

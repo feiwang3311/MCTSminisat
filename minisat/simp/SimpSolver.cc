@@ -105,8 +105,10 @@ void SimpSolver::releaseVar(Lit l)
 
 lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
 {
-    vec<Var> extra_frozen;
-    lbool    result = l_True;
+    if (env_hold) {goto label3;} // Comments by Fei:
+
+    // vec<Var> extra_frozen; // Comments by Fei: use field variable instead
+    // lbool    result = l_True; // Comments by Fei: use field variable instead
 
     do_simp &= use_simplification;
 
@@ -127,8 +129,11 @@ lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
         result = lbool(eliminate(turn_off_simp));
     }
 
-    if (result == l_True)
+    if (result == l_True) {
+label3:
         result = Solver::solve_();
+        if (env_hold) return l_Undef;
+    }
     else if (verbosity >= 1)
         printf("===============================================================================\n");
 

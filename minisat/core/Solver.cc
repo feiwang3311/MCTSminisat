@@ -263,7 +263,7 @@ Lit Solver::pickBranchLit()
             break;
         }else
             next = order_heap.removeMin();
-    
+
     // Choose polarity based on different polarity modes (global or per-variable):
     if (next == var_Undef)
         return lit_Undef;
@@ -699,22 +699,27 @@ bool Solver::simplify()
 |    all variables are decision variables, this means that the clause set is satisfiable. 'l_False'
 |    if the clause set is unsatisfiable. 'l_Undef' if the bound on number of conflicts is reached.
 |________________________________________________________________________________________________@*/
-lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a field!
-{
+lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a field called number_of_conflicts. The parameter is now dummy!
+{ 
+    if (env_hold) {goto label2;}
+
     assert(ok);
-    int         backtrack_level; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
-    int         conflictC = 0; // Comments by Fei: new declaration! both this and nof_conflicts have to be fields!
-    vec<Lit>    learnt_clause; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
+    // int         backtrack_level; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
+    // int         conflictC = 0; // Comments by Fei: new declaration! both this and nof_conflicts have to be fields!
+    conflictCounts = 0; // Comments by Fei: replace the local variable above!
+    // vec<Lit>    learnt_clause; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
     starts++;
 
-    for (;;){
-        CRef confl = propagate();
+    while (true){
+        confl = propagate(); // Comments by Fei: changed to field variable
         if (confl != CRef_Undef){
             // CONFLICT
-            conflicts++; conflictC++;
+            conflicts++; conflictCounts++; // Comments by Fei: replace usage! conflictC++;
             if (decisionLevel() == 0) return l_False;
 
+            vec<Lit> learnt_clause; // Comments by Fei: make this variable local to loop (used and destroyed)
             learnt_clause.clear();
+            int backtrack_level; // Comments by Fei: make this variable local to loop (used and destroyed)
             analyze(confl, learnt_clause, backtrack_level);
             cancelUntil(backtrack_level);
 
@@ -745,21 +750,22 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
 
         }else{
             // NO CONFLICT
-            if ((nof_conflicts >= 0 && conflictC >= nof_conflicts) || !withinBudget()){
+            if ((number_of_conflicts >= 0 && conflictCounts >= number_of_conflicts) || !withinBudget()){ // Comments by Fei: usage of local variables are changed to usage of global variables
                 // Reached bound on number of conflicts:
                 progress_estimate = progressEstimate();
                 cancelUntil(0);
-                return l_Undef; }
+                return l_Undef; 
+            }
 
             // Simplify the set of problem clauses:
-            if (decisionLevel() == 0 && !simplify())
+            if (decisionLevel() == 0 && !simplify()) 
                 return l_False;
 
             if (learnts.size()-nAssigns() >= max_learnts)
                 // Reduce the set of learnt clauses:
                 reduceDB();
 
-            Lit next = lit_Undef;
+            field_of_next = lit_Undef; // Comments by Fei: change to field variable
             while (decisionLevel() < assumptions.size()){
                 // Perform user provided assumption:
                 Lit p = assumptions[decisionLevel()];
@@ -770,27 +776,36 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                     analyzeFinal(~p, conflict);
                     return l_False;
                 }else{
-                    next = p;
+                    field_of_next = p; // Comments by Fei: change to field variable
                     break;
                 }
             }
 
-            if (next == lit_Undef){
+            if (field_of_next == lit_Undef){ // Comments by Fei: change to field variable
                 // New variable decision:
                 decisions++;
-                next = pickBranchLit();
-                // Comments by Fei, snap the state and mark the decision
-                // Comments by Fei, should comment this out when adapting solver to reinforcement learning environment
-                // if (var(next) >= 0) snapState(snapTo, assumptions, next); 
+                // Comments by Fei: as an RL env, the function should return now, and report the state so that an agent can make the next decision
+                env_hold = true; // Comments by Fei: need to set env_hold to true, because we are holding on to the problem! 
+                //printf("hold!");
+                return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
+label2:
+                // next = pickBranchLit();
+                field_of_next = agent_decision; // Comments by Fei: now we use agent_decision! // Comments by Fei: change to field variable
+                //printf("pick_var %s%d\n", sign(field_of_next)? "-" : "", var(field_of_next) + 1);
+                env_hold = false;
+                //printf("unhold!");
+                // // // Comments by Fei, snap the state and mark the decision
+                // // // Comments by Fei, should comment this out when adapting solver to reinforcement learning environment
+                // // //if (var(next) >= 0) snapState(snapTo, assumptions, next); 
 
-                if (next == lit_Undef)
+                if (field_of_next == lit_Undef) // Comments by Fei: change to field variable
                     // Model found:
                     return l_True;
             }
 
             // Increase decision level and enqueue 'next'
             newDecisionLevel();
-            uncheckedEnqueue(next);
+            uncheckedEnqueue(field_of_next); // Comments by Fei: change to field variable
         }
     }
 }
@@ -841,6 +856,9 @@ static double luby(double y, int x){
 // NOTE: assumptions passed in member-variable 'assumptions'.
 lbool Solver::solve_()
 {
+    // Comments by Fei: if env_hold, jump to search() function!
+    if (env_hold) {goto label1;}
+    // Comments by Fei: otherwise, start from here:
     model.clear();
     conflict.clear();
     if (!ok) return l_False;
@@ -853,7 +871,8 @@ lbool Solver::solve_()
 
     learntsize_adjust_confl   = learntsize_adjust_start_confl;
     learntsize_adjust_cnt     = (int)learntsize_adjust_confl;
-    lbool   status            = l_Undef; // Comments by Fei: new declaration! Logic around this variable should be rewritten!
+    // lbool   status            = l_Undef; // Comments by Fei: new declaration! Make this a field!
+    remember_status = l_Undef; // Comments by Fei: replace local variable with a field!
 
     if (verbosity >= 1){
         printf("============================[ Search Statistics ]==============================\n");
@@ -863,29 +882,31 @@ lbool Solver::solve_()
     }
 
     // Search:
-    int curr_restarts = 0; // Comments by Fei: new declaration! We can make it a field! 
-    // Comments by Fei: need to precompute rest_base * restart_first, reset ConflictC as zero
-    while (status == l_Undef){
-        double rest_base = luby_restart ? luby(restart_inc, curr_restarts) : pow(restart_inc, curr_restarts); // Comments by Fei: new declaration!
-        status = search(rest_base * restart_first);
+    // int curr_restarts = 0; // Comments by Fei: new declaration! We should make it a field! 
+    current_restarts = 0; // Comments by Fei: this is the field that replaces the curr_restarts local variable!
+    while (remember_status == l_Undef){ // Comments by Fei: replace local variable!
+        // double rest_base = luby_restart ? luby(restart_inc, current_restarts) : pow(restart_inc, current_restarts); // Comments by Fei: Change to use current_restarts, directly merge to the assignment of field
+        number_of_conflicts = restart_first * (luby_restart ? luby(restart_inc, current_restarts) : pow(restart_inc, current_restarts)); // Comments by Fei: This is to replace parameter assignment as field assignment!      
+label1:
+        remember_status = search(/*rest_base * restart_first*/ 0); // Comments by Fei. Just dummy parameter passed!
+        if (env_hold) return l_Undef; // Comments by Fei: If env_hold, we know solver is on hold, just return!
         if (!withinBudget()) break;
-        curr_restarts++;
-        // Comments by Fei: need to reset rest_base * restart_first, reset ConflictC as zero
+        current_restarts++; // Comments by Fei: replace with field variable   
     }
 
     if (verbosity >= 1)
         printf("===============================================================================\n");
 
 
-    if (status == l_True){
+    if (remember_status == l_True){ // Comments by Fei: replace local variable!
         // Extend & copy model:
         model.growTo(nVars());
-        for (int i = 0; i < nVars(); i++) model[i] = value(i);
-    }else if (status == l_False && conflict.size() == 0)
+        for (int i = 0; i < nVars(); i++) {model[i] = value(i);}
+    }else if (remember_status == l_False && conflict.size() == 0) // Comments by Fei: replace local variable!
         ok = false;
 
     cancelUntil(0);
-    return status;
+    return remember_status; // Comments by Fei: replace local variable!
 }
 
 
