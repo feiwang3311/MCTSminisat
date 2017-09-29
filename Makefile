@@ -69,8 +69,8 @@ else
 VERB=
 endif
 
-SRCS = $(wildcard minisat/core/*.cc) $(wildcard minisat/simp/*.cc) $(wildcard minisat/utils/*.cc)
-HDRS = $(wildcard minisat/mtl/*.h) $(wildcard minisat/core/*.h) $(wildcard minisat/simp/*.h) $(wildcard minisat/utils/*.h)
+SRCS = $(wildcard minisat/core/*.cc) $(wildcard minisat/simp/*.cc) $(wildcard minisat/utils/*.cc) $(wildcard minisat/gym/*.cc)
+HDRS = $(wildcard minisat/mtl/*.h) $(wildcard minisat/core/*.h) $(wildcard minisat/simp/*.h) $(wildcard minisat/utils/*.h) $(wildcard minisat/gym/*.h)
 OBJS = $(filter-out %Main.o, $(SRCS:.cc=.o))
 
 r:	$(BUILD_DIR)/release/bin/$(MINISAT)
@@ -172,7 +172,7 @@ install-debug:	install-headers install-lib-debug
 install-headers:
 #       Create directories
 	$(INSTALL) -d $(DESTDIR)$(includedir)/minisat
-	for dir in mtl utils core simp; do \
+	for dir in mtl utils core simp gym; do \
 	  $(INSTALL) -d $(DESTDIR)$(includedir)/minisat/$$dir ; \
 	done
 #       Install headers
@@ -194,6 +194,10 @@ install-lib: $(BUILD_DIR)/release/lib/$(MINISAT_SLIB) $(BUILD_DIR)/dynamic/lib/$
 install-bin: $(BUILD_DIR)/dynamic/bin/$(MINISAT)
 	$(INSTALL) -d $(DESTDIR)$(bindir)
 	$(INSTALL) -m 755 $(BUILD_DIR)/dynamic/bin/$(MINISAT) $(DESTDIR)$(bindir)
+
+python-wrap: $(BUILD_DIR)/dynamic/lib/$(MINISAT_DLIB).$(SOMAJOR).$(SOMINOR)$(SORELEASE)
+	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.cxx -o minisat/gym/GymSolver_wrap.o -I. -I/usr/include/python3.5m
+	g++ -shared -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/dynamic/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so
 
 clean:
 	rm -f $(foreach t, release debug profile dynamic, $(foreach o, $(SRCS:.cc=.o), $(BUILD_DIR)/$t/$o)) \

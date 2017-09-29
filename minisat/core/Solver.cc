@@ -758,8 +758,9 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
             }
 
             // Simplify the set of problem clauses:
-            if (decisionLevel() == 0 && !simplify()) 
+            if (decisionLevel() == 0 && !simplify()) { 
                 return l_False;
+            }
 
             if (learnts.size()-nAssigns() >= max_learnts)
                 // Reduce the set of learnt clauses:
@@ -786,6 +787,7 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 decisions++;
                 // Comments by Fei: as an RL env, the function should return now, and report the state so that an agent can make the next decision
                 env_hold = true; // Comments by Fei: need to set env_hold to true, because we are holding on to the problem! 
+                snapState(snapTo, assumptions, mkLit(0,false)); // Comments by Fei: this is to save the state (should optimize it later)
                 //printf("hold!");
                 return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
 label2:
@@ -1074,11 +1076,10 @@ void Solver::snapState(FILE* f, const vec<Lit>& assumps, const Lit next)
 
     // Assumptions are added as unit clauses:
     cnt += assumps.size();
+    fprintf(f, "p cnf %d %d\n", next_var, cnt);
     // if the number of unsolved clause is not positive, simply return
     if (cnt <= 0) return;
 
-    fprintf(f, "p cnf %d %d\n", next_var, cnt);
-    
     fprintf(f, "%s\n", "c this is assumption clauses");
     for (int i = 0; i < assumps.size(); i++){
         assert(value(assumps[i]) != l_False);
@@ -1100,9 +1101,10 @@ void Solver::snapState(FILE* f, const vec<Lit>& assumps, const Lit next)
 // Comments by Fei: entry point of snapState function, taking a filename and an assumptions list
 void Solver::snapState(const char *file, const vec<Lit>& assumps, const Lit next) {
     // Comments by Fei: use append mode because we will write multiple states (and decision choices) to the same file
-    FILE* f = fopen(file, "a");
-    if (f == NULL)
+    FILE* f = fopen(file, "w"); // Comments by Fei: use write mode for RL learning process.
+    if (f == NULL) {
         fprintf(stderr, "could not open file for snapState %s\n", file), exit(1);
+    }
     snapState(f, assumps, next);
     fclose(f);
 }
