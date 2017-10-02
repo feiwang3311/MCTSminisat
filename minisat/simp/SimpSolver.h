@@ -218,7 +218,7 @@ inline bool SimpSolver::solve        (const vec<Lit>& assumps, bool do_simp, boo
     budgetOff(); assumps.copyTo(assumptions); return solve_(do_simp, turn_off_simp) == l_True; }
 
 inline lbool SimpSolver::solveLimited (const vec<Lit>& assumps, bool do_simp, bool turn_off_simp){ 
-    env_hold = false; env_reward = 0.0; /*Comments by Fei: RL env init */
+    env_hold = false; env_reward = 0.0; env_state = 0; env_state_size = 0; /*Comments by Fei: RL env init */
     assumps.copyTo(assumptions); return solve_(do_simp, turn_off_simp); }
 
 //=================================================================================================

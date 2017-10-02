@@ -14,7 +14,7 @@ using namespace Minisat;
 // Constructor/Destructor:
 
 GymSolver::GymSolver(char* satProb) {
-	IntOption    verb   ("MAIN", "verb",   "Verbosity level (0=silent, 1=some, 2=more).", 1, IntRange(0, 2));
+	IntOption    verb   ("MAIN", "verb",   "Verbosity level (0=silent, 1=some, 2=more).", 0, IntRange(0, 2));
 	S.verbosity = verb;
 	gzFile in = gzopen(satProb, "rb");
     if (in == NULL) {
@@ -37,7 +37,11 @@ GymSolver::GymSolver(char* satProb) {
 }
 
 void GymSolver::step(int decision) {
-	S.agent_decision = mkLit(abs(decision)-1, decision < 0);
+    if (decision == 32767) {
+        S.agent_decision = S.default_pickLit(); // if the decision is MaxInt number, let the minisat decide!
+    } else {
+    	S.agent_decision = mkLit(abs(decision)-1, decision < 0);
+    }
 	S.step();
 }
 
@@ -50,5 +54,6 @@ bool GymSolver::getDone() {
 }
 
 char* GymSolver::getState() {
-	return S.snapTo;
+	//return S.snapTo;
+    return S.env_state;
 }

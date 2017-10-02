@@ -106,6 +106,11 @@ Solver::Solver() :
 
 Solver::~Solver()
 {
+    if (env_state_size > 0) {
+        delete[] env_state;
+        env_state = 0;
+        env_state_size = 0;
+    }
 }
 
 
@@ -786,15 +791,32 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 // New variable decision:
                 decisions++;
                 // Comments by Fei: as an RL env, the function should return now, and report the state so that an agent can make the next decision
+                // Comments by Fei: this is the old way to save the state (should optimize it later)
+                // snapState(snapTo, assumptions, mkLit(0,false));
+                // Comments by Fei: this is the new way to save the state. 
+                try {
+                    saveState(assumptions);
+                } catch (const char* msg) {
+                    printf("%s", msg);
+                    return l_False; // Comments by Fei: return l_False without setting env_hold as true is to terminate solver. (Not Sure if good)
+                }
+                if (env_state_size < 0) {
+                    return l_False; // Comments by Fei: this only happens if (!OK). terminate and stating UNSAT!
+                }
+                if (env_state_size == 0) {
+                    return l_True; // Comments by Fei: this only happens if solved! terminate and stating SAT (the model may not yet be complete.)
+                    // just NOTE: original design of miniSAT doesn't stop if number of unsalved clauses is 0. It will keep assigning values and finish the model.
+                }
+
                 env_hold = true; // Comments by Fei: need to set env_hold to true, because we are holding on to the problem! 
-                snapState(snapTo, assumptions, mkLit(0,false)); // Comments by Fei: this is to save the state (should optimize it later)
-                //printf("hold!");
+                env_reward = -1.0;
                 return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
 label2:
                 // next = pickBranchLit();
                 field_of_next = agent_decision; // Comments by Fei: now we use agent_decision! // Comments by Fei: change to field variable
                 //printf("pick_var %s%d\n", sign(field_of_next)? "-" : "", var(field_of_next) + 1);
                 env_hold = false;
+                env_reward = 0.0;
                 //printf("unhold!");
                 // // // Comments by Fei, snap the state and mark the decision
                 // // // Comments by Fei, should comment this out when adapting solver to reinforcement learning environment
@@ -1108,6 +1130,103 @@ void Solver::snapState(const char *file, const vec<Lit>& assumps, const Lit next
     snapState(f, assumps, next);
     fclose(f);
 }
+
+// Comments by Fei: entry point of saveState function
+void Solver::saveState(const vec<Lit>& assumps) {
+
+    // Handle case when solver is in contradictory state:
+    if (!ok){
+        printf("c solver is in contradictory state!\n"); 
+        if (env_state_size > 0) { 
+            delete[] env_state; // delete the heap memory before ending the case.
+            env_state = 0;
+        }
+        env_state_size = -1; // negative env_state_size is indication of contradictory state!
+        return; 
+    }
+
+    // First: count the unresolved clauses.
+    int cnt_clause = 0;
+    int cnt_learnt = 0;
+    for (int i = 0; i < clauses.size(); i++)
+        if (!satisfied(ca[clauses[i]]))
+            cnt_clause++;
+    for (int i = 0; i < learnts.size(); i++)
+        if (!satisfied(ca[learnts[i]]))
+            cnt_learnt++;
+    // NOTE: if we ever need assumps later, we need to add it into estimate_size calculation!
+
+    if (cnt_clause == 0 && cnt_learnt == 0) {
+        // SAT has been solved! this is the degenerated case!
+        if (env_state_size > 0) {
+            delete[] env_state; // delete the heap memory before ending the case.
+            env_state = 0;
+        }
+        env_state_size = 0; // 0 valued env_state_size is indication of solved state!
+        return;
+    }
+
+    // Second: estimate the size needed for storing the state
+    /* each var is at most 4 chars, at most 3 vars per clause, with 0 and \n ending
+    // learnt clauses may have more vars per clause. Use 20 as upper bound
+    // header maybe 20 chars long */
+    int estimate_size = cnt_clause * (4 * 3 + 2) + cnt_learnt * (4 * 20 + 2) + (20);
+    estimate_size += estimate_size / 10; // give 10 percent more relaxation.
+
+    // Third: set ready the env_state space
+    if (env_state_size < estimate_size) {
+        // need more space (or the first time to declare a space)
+        if (env_state_size > 0) {
+            // we had a smaller state memory already. Should delete!
+            delete[] env_state;
+        }
+        env_state_size = estimate_size;
+        env_state = new char[estimate_size];
+    } else {
+        // we have enough space for state, but we might need to clear it (NOT SURE).
+    } 
+
+    // Fourth: save state in env_state, Should end state with end char
+    int used_space = 0;
+    int temp = snprintf(env_state, env_state_size, "p cnf %d %d\n", next_var, cnt_clause + cnt_learnt + assumps.size());
+    used_space = handle_writting_state(temp, used_space);
+    for (int i = 0; i < clauses.size(); i++) {
+        used_space = saveState(ca[clauses[i]], used_space);
+    }
+    for (int i = 0; i < learnts.size(); i++){
+        used_space = saveState(ca[learnts[i]], used_space);
+    }
+
+}
+
+// Comments by Fei: this function writes each clause
+int Solver::saveState(Clause& c, int used_space) {
+    if (satisfied(c)) return used_space;
+    for (int i = 0; i < c.size(); i++) {
+        if (value(c[i]) != l_False) {
+            int temp = snprintf(env_state + used_space, env_state_size - used_space, "%s%d ", sign(c[i]) ? "-" : "", var(c[i])+1);
+            used_space = handle_writting_state(temp, used_space);
+        }
+    }
+    int temp = snprintf(env_state + used_space, env_state_size - used_space, "0\n");
+    return handle_writting_state(temp, used_space);
+}
+
+// Comments by Fei: this function handles complicated situations about snprintf
+int Solver::handle_writting_state(int temp, int used_space) {
+    if (temp < 0 || temp + used_space >= env_state_size) { 
+        if (env_state_size > 0) {
+            delete[] env_state;
+            env_state = 0;
+            env_state_size = -1;
+        }
+        if (temp < 0) throw "writing to state failed\n";
+        else throw "not enough space in state memory\n";
+    }
+    else return temp + used_space;
+}
+
+
 
 void Solver::printStats() const
 {

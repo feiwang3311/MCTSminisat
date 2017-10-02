@@ -83,6 +83,11 @@ public:
     void    snapState     (const char *file, const vec<Lit>& assumps, const Lit next);
     void    snapState     (FILE* f, Clause& c, vec<Var>& map, Var& max);
 
+    void    saveState(const vec<Lit>& assumps); // Comments by Fei: save the state in field env_state.
+    int     saveState(Clause& c, int used_space); // Comments by Fei: sub-routine to a clause
+    int     handle_writting_state(int temp, int used_space); // Comments by Fei: sub-routine to handle snprintf.
+
+
     // Convenience versions of 'toDimacs()':
     void    toDimacs     (const char* file);
     void    toDimacs     (const char* file, Lit p);
@@ -154,6 +159,8 @@ public:
                                   // Comments by Fei. When env_hold is true, the system is holding on the next decision variable!
                                   // Comments by Fei. otherwise, the system is done (sat or unsat)
     double    env_reward;         // Comments by Fei. This the variable that contains the reward of each step!
+    char*     env_state;          // Comments by Fei. This is the pointer to the current state (just like the file content of snapTo, but in heap memory)
+    int       env_state_size;     // Comments by Fei. This is the value of current allocated state heap memory size.
     int       current_restarts;   // Comments by Fei. This is to track how many restarts have we done. Adopted from a local variable in solve_()
     int       number_of_conflicts;// Comments by Fei. This is to track how many conflicts are allowed in a given restart cycle. Adopted from the parameter of search()
     int       conflictCounts;     // Comments by Fei. This is to track how many conflicts have generated for this given restart cycle. Adopted from the local variable in search()
