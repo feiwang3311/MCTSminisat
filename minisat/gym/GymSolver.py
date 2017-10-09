@@ -132,6 +132,8 @@ import numpy as np
 import gym
 from gym import spaces
 import random
+from os import listdir
+from os.path import isfile, join
 class gym_sat_Env(gym.Env):
 	
 	"""
@@ -139,7 +141,20 @@ class gym_sat_Env(gym.Env):
 		max_clause: the number of rows in state representation
 		max_var: the number of columns in state representation
 	"""
-	def __init__(self, max_clause=100, max_var=20): 
+	def __init__(self, max_clause=100, max_var=20, test_path = None):
+		if test_path == None:
+			print("We are in the training mode of path {}".format("uf20-91"))
+			self.test_mode = False
+			self.test_path = "uf20-91"
+		else:
+			print("We are in the test mode of path {}".format(test_path))
+			self.test_mode = True
+			self.test_path = test_path
+		
+		# Get all test files
+		self.test_files = [join(self.test_path, f) for f in listdir(self.test_path) if isfile(join(self.test_path, f))]
+		self.test_file_num = len(self.test_files)
+		self.test_to = 0
 		self.max_clause = max_clause
 		self.max_var = max_var
 		self.observation_space = np.zeros((max_clause, max_var, 1))
@@ -183,8 +198,15 @@ class gym_sat_Env(gym.Env):
 
 	# TODO: add a randomlization pick of files from a file list, give that choice to "satProb"
 	def random_pick_satProb(self):
-		# uf20-91/uf20-0 i .cnf, where i is 1 to 1000 
-		return "uf20-91/uf20-0" + str(random.randint(1,1000)) + ".cnf"
+		if self.test_mode: # in the test mode, just iterate all test files in order
+			filename = self.test_files[self.test_to]
+			self.test_to += 1
+			if self.test_to >= self.test_file_num:
+				self.test_to = 0
+			return filename
+		else: # not in test mode, return a random file in "uf20-91" folder: uf20-91/uf20-0 i .cnf, where i is 1 to 1000 
+			return self.test_files[random.randint(0, self.test_file_num - 1)]
+		# return "uf20-91/uf20-0" + str(random.randint(1,1000)) + ".cnf"
 
 	"""
 		this function reports to the agent about the environment
@@ -196,10 +218,12 @@ class gym_sat_Env(gym.Env):
 		this function reset the environment and return the initial state
 	"""
 	def reset(self):
-		self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
+		if self.test_mode: # in test mode, we print the actual score of each SAT problem in test files
+			print(self.score, end=".", flush=True)
+		else: # in training mode, we print an exponential average of scores of randomly picked files
+			self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
+			print(round(self.exp_av_score), end=".", flush = True)
 		self.score = 0
-		print(round(self.exp_av_score), end=".", flush = True)
-		#print("r", end="", flush=True)
 		self.S = GymSolver(self.random_pick_satProb())
 		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
 		return self.curr_state
