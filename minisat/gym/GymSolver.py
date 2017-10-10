@@ -134,6 +134,7 @@ from gym import spaces
 import random
 from os import listdir
 from os.path import isfile, join
+import _thread
 class gym_sat_Env(gym.Env):
 	
 	"""
@@ -145,7 +146,7 @@ class gym_sat_Env(gym.Env):
 		if test_path == None:
 			print("We are in the training mode of path {}".format("uf20-91"))
 			self.test_mode = False
-			self.test_path = "uf20-91"
+			self.test_path = "uf20-91_train"
 		else:
 			print("We are in the test mode of path {}".format(test_path))
 			self.test_mode = True
@@ -196,7 +197,9 @@ class gym_sat_Env(gym.Env):
 					break;
 		return curr_state, clause_counter, False, actionSet
 
-	# TODO: add a randomlization pick of files from a file list, give that choice to "satProb"
+	"""
+		this function randomly pick a file from the training file set
+	"""
 	def random_pick_satProb(self):
 		if self.test_mode: # in the test mode, just iterate all test files in order
 			filename = self.test_files[self.test_to]
@@ -204,9 +207,32 @@ class gym_sat_Env(gym.Env):
 			if self.test_to >= self.test_file_num:
 				self.test_to = 0
 			return filename
-		else: # not in test mode, return a random file in "uf20-91" folder: uf20-91/uf20-0 i .cnf, where i is 1 to 1000 
+		else: # not in test mode, return a random file in "uf20-91" folder.
 			return self.test_files[random.randint(0, self.test_file_num - 1)]
-		# return "uf20-91/uf20-0" + str(random.randint(1,1000)) + ".cnf"
+
+	"""
+		this function permute the rows (clauses) of a given file, and rewrite that file with the permuted one
+	"""
+	def permute_row(self, filename):
+		clauses = []
+		header = None
+		with open(filename, "r") as read_in:
+			for line in read_in:
+				if line.startswith("p cnf"):
+					header = line
+				elif line.startswith("c"):
+				    # comments line, skip
+				    continue
+				elif any(char.isdigit() and (not char == '0') for char in line): 
+					# clause data line
+					# put them in a list first, then permute and write to write_out
+					clauses.append(line)
+		with open(filename, 'w') as write_out:
+			write_out.write(header)
+			# permute the clauses and write to write_out
+			random.shuffle(clauses)
+			for line in clauses:
+				write_out.write(line)
 
 	"""
 		this function reports to the agent about the environment
@@ -224,7 +250,10 @@ class gym_sat_Env(gym.Env):
 			self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
 			print(round(self.exp_av_score), end=".", flush = True)
 		self.score = 0
-		self.S = GymSolver(self.random_pick_satProb())
+		filename = self.random_pick_satProb()
+		self.S = GymSolver(filename)
+		# since we just used the "filename", we should permute rows of this file in a separate thread
+		_thread.start_new_thread(self.permute_row, (filename,))
 		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
 		return self.curr_state
 
