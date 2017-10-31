@@ -124,659 +124,118 @@ class GymSolver(_object):
     __del__ = lambda self: None
 GymSolver_swigregister = _GymSolver.GymSolver_swigregister
 GymSolver_swigregister(GymSolver)
-
 # This file is compatible with both classic and new-style classes.
 
-# Following file is the real GymSAT part
 import numpy as np
-import gym
-from gym import spaces
 import random
 from os import listdir
 from os.path import isfile, join
-import _thread
-class gym_sat_Env(gym.Env):
-	
+class minisat_wrapper(object):
 	"""
-		this class is a gym environment for Reinforcement Learning algorithms
-		It doesn't do any preprocessing (sorting matrix) or postprocessing (permute the training file)
-		max_clause: the number of rows in state representation
-		max_var: the number of columns in state representation
+		this class is a simple wrapper of minisat instance, used in MCTS training as perfect information
 	"""
-	def __init__(self, max_clause=100, max_var=20, test_path = None):
-		if test_path == None:
-			self.test_mode = False
-			self.test_path = "uf20-91_train_v0" # Comments by Fei: BE AWARE, the directory of the training files is statically determined in __init__function
-			print("SAT-v0: We are in the training mode of path {}".format(self.test_path))
-		else:
-			self.test_mode = True
-			self.test_path = test_path
-			print("SAT-v0: We are in the test mode of path {}".format(self.test_path))
-		# Get all test files
-		self.test_files = [join(self.test_path, f) for f in listdir(self.test_path) if isfile(join(self.test_path, f))]
-		self.test_file_num = len(self.test_files)
-		self.test_to = 0
+	def __init__(self, sat_dir, max_clause = 100, max_var = 20, mode = 'random'):
+		"""
+			sat_dir: directory to the sat problems
+			max_clause: number of rows for the final state
+			max_var: number of columns for the final state
+			mode: 'random' => at reset, randomly pick a file from directory
+				  'iterate' => at reset, iterate each file one by one
+				  'repeat^n' => at reset, give the same problem n times before iterates to the next one
+				  'filename' => at reset, repeatly use the given filename
+		"""
+		print("SAT-v0: at dir {} max_clause {} max_var {} mode {}".format(sat_dir, max_clause, max_var, mode))
+		self.sat_dir = sat_dir
+		self.sat_files = [join(self.sat_dir, f) for f in listdir(self.sat_dir) if isfile(join(self.sat_dir, f))]
+		self.sat_file_num = len(self.sat_files)
 		self.max_clause = max_clause
 		self.max_var = max_var
-		self.observation_space = np.zeros((max_clause, max_var, 1))
-		self.action_space = spaces.Discrete(2*self.max_var)
-		self.score = 0
-		self.exp_av_score = 15 # some randomly initialized initial average value
-		
-	"""
-		this function parse the state into sparse matrix with -1 or 1 values
-		Can handle the case when state is empty and the SAT is either broken or solved already
-	"""
+		self.observation_space = np.zeros((max_clause, max_var, 2))
+		self.action_space = max_var * 2
+		self.mode = mode
+		if mode.startswith("repeat^"):
+			self.repeat_limit = int(mode.split('^')[1])
+		elif (mode == "random" or mode == "iterate"): pass
+		else:
+			try:
+				self.file_index = self.sat_files.index(join(self.sat_dir, self.mode))
+			except ValueError:
+				assert False, "file {} in not in dir {}".format(mode, sat_dir)
+		# this class is stateful, by these fields
+		self.repeat_counter = 0
+		self.iterate_counter = 0
+
 	def parse_state(self):
-		curr_state = np.zeros((self.max_clause, self.max_var, 1), dtype = np.int8)
-		clause_counter = 0 # this tracks the current row-to-write (which is permutable!)
-		actionSet = set() # this set tracks all allowed actions for this state
-		# if S is already Done, should return here.
-		if self.S.getDone():
-			return curr_state, clause_counter, True, actionSet
-		# S is not yet Done, parse and return real state
-		for line in self.S.getState().split('\n'):
-			if line.startswith("p cnf"): # this is the header of a cnf problem # p cnf 20 90
-				header = line.split(" ")
-				num_var = int(header[2])
-				num_clause = int(header[3])
-				assert (num_var <= self.max_var)
-				# assert (num_clause <= self.max_clause) # remove this assert (might be wrong if we learnt too many clauses and restarted)
-			elif line.startswith("c"):
-				continue
-			else: # clause data line # -11 -17 20 0
-				literals = line.split(" ")
-				n = len(literals)
-				for j in range(n-1):
-					number = int(literals[j])
-					value = 1 if number > 0 else -1
-					curr_state[clause_counter, abs(number) - 1] = value
-					actionSet.add(number)
-				clause_counter += 1
-				if clause_counter >= self.max_clause: # add a safe guard for overflow of number of clauses
-					break;
-		return curr_state, clause_counter, False, actionSet
-
-	"""
-		this function randomly pick a file from the training file set
-	"""
-	def random_pick_satProb(self):
-		if self.test_mode: # in the test mode, just iterate all test files in order
-			filename = self.test_files[self.test_to]
-			self.test_to += 1
-			if self.test_to >= self.test_file_num:
-				self.test_to = 0
-			return filename
-		else: # not in test mode, return a random file in "uf20-91" folder.
-			return self.test_files[random.randint(0, self.test_file_num - 1)]
-
-	"""
-		this function reports to the agent about the environment
-	"""
-	def report_to_agent(self):
-		return self.curr_state, self.S.getReward(), self.isSolved, {}
-
-	"""
-		this function reset the environment and return the initial state
-	"""
-	def reset(self):
-		if self.test_mode: # in test mode, we print the actual score of each SAT problem in test files
-			print(self.score, end=".", flush=True)
-		else: # in training mode, we print an exponential average of scores of randomly picked files
-			self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
-			print(round(self.exp_av_score), end=".", flush = True)
-		self.score = 0
-		filename = self.random_pick_satProb()
-		self.S = GymSolver(filename)
-		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-		return self.curr_state
-
-	"""
-		this function make a step based on parameter input
-	"""
-	def step(self, decision):
-		self.score += 1
-		if (decision < 0): # this is to say that let minisat pick the decision
-			decision = 32767
-		elif (decision % 2 == 0): # this is to say that pick decision and assign positive value
-			decision = int(decision / 2 + 1)
-		else: # this is to say that pick decision and assign negative value
-			decision = 0 - int(decision / 2 + 1) 
-		if (decision in self.actionSet) or (decision == 32767):
-			self.S.step(decision)
-			self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-			return self.report_to_agent()
-		else:
-			return self.report_to_agent() 
-
-	"""
-		this function renders the sat problem
-	"""
-	def render(self, mode='human', close=False):
-		pass
-
-
-class gym_sat_sort_Env(gym.Env):
-	
-	"""
-		this class is a gym environment for Reinforcement Learning algorithms
-		It always sort the rows of matrix that represent each state!
-		max_clause: the number of rows in state representation
-		max_var: the number of columns in state representation
-	"""
-	def __init__(self, max_clause=100, max_var=20, test_path = None):
-		if test_path == None:
-			self.test_mode = False
-			self.test_path = "uf20-91_train_v1" # Comments by Fei: BE AWARE, the directory of training files is statically defined in __init__function!
-			print("SAT-v1 (sort): We are in the training mode of path {}".format(self.test_path))
-		else:
-			self.test_mode = True
-			self.test_path = test_path
-			print("SAT-v1 (sort): We are in the test mode of path {}".format(self.test_path))
-		# Get all test files
-		self.test_files = [join(self.test_path, f) for f in listdir(self.test_path) if isfile(join(self.test_path, f))]
-		self.test_file_num = len(self.test_files)
-		self.test_to = 0
-		self.max_clause = max_clause
-		self.max_var = max_var
-		self.observation_space = np.zeros((max_clause, max_var, 1))
-		self.action_space = spaces.Discrete(2*self.max_var)
-		self.score = 0
-		self.exp_av_score = 15 # some randomly initialized initial average value
-		
-	"""
-		this function parse the state into sparse matrix with -1 or 1 values
-		Can handle the case when state is empty and the SAT is either broken or solved already
-	"""
-	def parse_state(self):
-		curr_state = np.zeros((self.max_clause, self.max_var, 1), dtype = np.int8)
-		clause_counter = 0 # this tracks the current row-to-write (which is permutable!)
-		actionSet = set() # this set tracks all allowed actions for this state
-		# if S is already Done, should return here.
-		if self.S.getDone():
-			return curr_state, clause_counter, True, actionSet
-		# S is not yet Done, parse and return real state
-		for line in self.S.getState().split('\n'):
-			if line.startswith("p cnf"): # this is the header of a cnf problem # p cnf 20 90
-				header = line.split(" ")
-				num_var = int(header[2])
-				num_clause = int(header[3])
-				assert (num_var <= self.max_var)
-				# assert (num_clause <= self.max_clause) # remove this assert (might be wrong if we learnt too many clauses and restarted)
-			elif line.startswith("c"):
-				continue
-			else: # clause data line # -11 -17 20 0
-				literals = line.split(" ")
-				n = len(literals)
-				for j in range(n-1):
-					number = int(literals[j])
-					value = 1 if number > 0 else -1
-					curr_state[clause_counter, abs(number) - 1] = value
-					actionSet.add(number)
-				clause_counter += 1
-				if clause_counter >= self.max_clause: # add a safe guard for overflow of number of clauses
-					break;
-		curr_state = self.sortMatrix(curr_state) # this is to sort the state representation by rows (every time we parse the state)
-		return curr_state, clause_counter, False, actionSet
-
-	"""
-		this function return the sorted Matrix 
-	"""
-	def sortMatrix(self, M):
-		[row, col, _] = M.shape
-		Morder = np.zeros(row)
-		for i in range(col):
-			Morder = Morder * 2 + np.absolute(M[:, i, 0])
-		index = np.argsort(-1 * Morder)
-		return M[index, :, :]
-
-	"""
-		this function randomly pick a file from the training file set
-	"""
-	def random_pick_satProb(self):
-		if self.test_mode: # in the test mode, just iterate all test files in order
-			filename = self.test_files[self.test_to]
-			self.test_to += 1
-			if self.test_to >= self.test_file_num:
-				self.test_to = 0
-			return filename
-		else: # not in test mode, return a random file in "uf20-91" folder.
-			return self.test_files[random.randint(0, self.test_file_num - 1)]
-
-	"""
-		this function reports to the agent about the environment
-	"""
-	def report_to_agent(self):
-		return self.curr_state, self.S.getReward(), self.isSolved, {}
-
-	"""
-		this function reset the environment and return the initial state
-	"""
-	def reset(self):
-		if self.test_mode: # in test mode, we print the actual score of each SAT problem in test files
-			print(self.score, end=".", flush=True)
-		else: # in training mode, we print an exponential average of scores of randomly picked files
-			self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
-			print(round(self.exp_av_score), end=".", flush = True)
-		self.score = 0
-		filename = self.random_pick_satProb()
-		self.S = GymSolver(filename)
-		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-		return self.curr_state
-
-	"""
-		this function make a step based on parameter input
-	"""
-	def step(self, decision):
-		self.score += 1
-		if (decision < 0): # this is to say that let minisat pick the decision
-			decision = 32767
-		elif (decision % 2 == 0): # this is to say that pick decision and assign positive value
-			decision = int(decision / 2 + 1)
-		else: # this is to say that pick decision and assign negative value
-			decision = 0 - int(decision / 2 + 1) 
-		if (decision in self.actionSet) or (decision == 32767):
-			self.S.step(decision)
-			self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-			return self.report_to_agent()
-		else:
-			return self.report_to_agent() 
-
-	"""
-		this function renders the sat problem
-	"""
-	def render(self, mode='human', close=False):
-		pass
-
-class gym_sat_permute_Env(gym.Env):
-	
-	"""
-		this class is a gym environment for Reinforcement Learning algorithms
-		It always permute the rows after reading a file
-		max_clause: the number of rows in state representation
-		max_var: the number of columns in state representation
-	"""
-	def __init__(self, max_clause=100, max_var=20, test_path = None):
-		if test_path == None:
-			self.test_mode = False
-			self.test_path = "uf20-91_train_v2" # Comment by Fei: BE AWARE, the training data directory in statically determined in __init__function
-			print("SAT-v2 (permute): We are in the training mode of path {}".format(self.test_path))
-		else:
-			self.test_mode = True
-			self.test_path = test_path
-			print("SAT-v2 (permute): We are in the test mode of path {}".format(self.test_path))
-		# Get all test files
-		self.test_files = [join(self.test_path, f) for f in listdir(self.test_path) if isfile(join(self.test_path, f))]
-		self.test_file_num = len(self.test_files)
-		self.test_to = 0
-		self.max_clause = max_clause
-		self.max_var = max_var
-		self.observation_space = np.zeros((max_clause, max_var, 1))
-		self.action_space = spaces.Discrete(2*self.max_var)
-		self.score = 0
-		self.exp_av_score = 15 # some randomly initialized initial average value
-		
-	"""
-		this function parse the state into sparse matrix with -1 or 1 values
-		Can handle the case when state is empty and the SAT is either broken or solved already
-	"""
-	def parse_state(self):
-		curr_state = np.zeros((self.max_clause, self.max_var, 1), dtype = np.int8)
-		clause_counter = 0 # this tracks the current row-to-write (which is permutable!)
-		actionSet = set() # this set tracks all allowed actions for this state
-		# if S is already Done, should return here.
-		if self.S.getDone():
-			return curr_state, clause_counter, True, actionSet
-		# S is not yet Done, parse and return real state
-		for line in self.S.getState().split('\n'):
-			if line.startswith("p cnf"): # this is the header of a cnf problem # p cnf 20 90
-				header = line.split(" ")
-				num_var = int(header[2])
-				num_clause = int(header[3])
-				assert (num_var <= self.max_var)
-				# assert (num_clause <= self.max_clause) # remove this assert (might be wrong if we learnt too many clauses and restarted)
-			elif line.startswith("c"):
-				continue
-			else: # clause data line # -11 -17 20 0
-				literals = line.split(" ")
-				n = len(literals)
-				for j in range(n-1):
-					number = int(literals[j])
-					value = 1 if number > 0 else -1
-					curr_state[clause_counter, abs(number) - 1] = value
-					actionSet.add(number)
-				clause_counter += 1
-				if clause_counter >= self.max_clause: # add a safe guard for overflow of number of clauses
-					break;
-		return curr_state, clause_counter, False, actionSet
-
-	"""
-		this function randomly pick a file from the training file set
-	"""
-	def random_pick_satProb(self):
-		if self.test_mode: # in the test mode, just iterate all test files in order
-			filename = self.test_files[self.test_to]
-			self.test_to += 1
-			if self.test_to >= self.test_file_num:
-				self.test_to = 0
-			return filename
-		else: # not in test mode, return a random file in "uf20-91" folder.
-			return self.test_files[random.randint(0, self.test_file_num - 1)]
-
-	"""
-		this function permute the rows (clauses) of a given file, and rewrite that file with the permuted one
-	"""
-	def permute_row(self, filename):
-		clauses = []
-		header = None
-		with open(filename, "r") as read_in:
-			for line in read_in:
+		"""
+			this function parse the state into sparse matrix (max_clause, max_var, 2) with True for a var in clause 
+		"""
+		curr_state = np.zeros((self.max_clause, self.max_var, 2), dtype=bool)
+		clause_counter = 0
+		actionSet = set()
+		if not self.S.getDone():
+			for line in self.S.getState().split('\n'): # S.getState() gives a string representation of state in cnf format
 				if line.startswith("p cnf"):
-					header = line
+					header = line.split(" ")
+					num_var = int(header[2])
+					num_clause = int(header[3])
+					assert (num_var <= self.max_var), "num var superseded max var"
 				elif line.startswith("c"):
-				    # comments line, skip
-				    continue
-				elif any(char.isdigit() and (not char == '0') for char in line): 
-					# clause data line
-					# put them in a list first, then permute and write to write_out
-					clauses.append(line)
-		with open(filename, 'w') as write_out:
-			if header is None:
-				print("file {} has no header".format(filename))
-			else:	
-				write_out.write(header)
-				# permute the clauses and write to write_out
-				random.shuffle(clauses)
-				for line in clauses:
-					write_out.write(line)
+					continue
+				elif any(char.isdigit() and (not char == '0') for char in line):
+					literals = line.split(" ")
+					n = len(literals)
+					for j in range(n-1):
+						number = int(literals[j])
+						nz = 0 if number > 0 else 1
+						curr_state[clause_counter, abs(number) - 1, nz] = True
+						actionSet.add(number)
+					clause_counter += 1
+					if clause_counter >= self.max_clause:
+						break
+		return curr_state, clause_counter, self.S.getDone(), actionSet
 
-	"""
-		this function reports to the agent about the environment
-	"""
-	def report_to_agent(self):
-		return self.curr_state, self.S.getReward(), self.isSolved, {}
-
-	"""
-		this function reset the environment and return the initial state
-	"""
 	def reset(self):
-		if self.test_mode: # in test mode, we print the actual score of each SAT problem in test files
-			print(self.score, end=".", flush=True)
-		else: # in training mode, we print an exponential average of scores of randomly picked files
-			self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
-			print(round(self.exp_av_score), end=".", flush = True)
-		self.score = 0
-		filename = self.random_pick_satProb()
-		self.S = GymSolver(filename)
-		# since we just used the "filename", we should permute rows of this file in a separate thread
-		_thread.start_new_thread(self.permute_row, (filename,))
+		"""
+			this function reset the minisat by the rule of mode
+		"""
+		if self.mode == "random":
+			pickfile = self.sat_files[random.randint(0, self.sat_file_num - 1)]
+			self.repeat_counter += 1
+		elif self.mode == "iterate":
+			pickfile = self.sat_files[self.iterate_counter]
+			self.iterate_counter += 1
+			if self.iterate_counter >= self.sat_file_num:
+				self.iterate_counter = 0
+				self.repeat_counter += 1
+				print("WARNING: iteration of all files in dir {} is done, will restart iteration".format(self.sat_dir))
+		elif self.mode.startswith("repeat^"):
+			pickfile = self.sat_files[self.iterate_counter]
+			self.repeat_counter += 1
+			if self.repeat_counter >= self.repeat_limit:
+				self.repeat_counter = 0
+				self.iterate_counter += 1
+				if self.iterate_counter >= self.sat_file_num:
+					self.iterate_counter = 0
+					print("WARNING: repeated iteration of all files in dir {} is done, will restart iteration".format(self.sat_dir))
+		else:
+			pickfile = self.sat_files[self.file_index]
+			self.repeat_counter += 1
+		self.S = GymSolver(pickfile)
 		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
 		return self.curr_state
 
-	"""
-		this function make a step based on parameter input
-	"""
 	def step(self, decision):
-		self.score += 1
+		"""
+			this function makes a step based on the parameter input
+		"""
 		if (decision < 0): # this is to say that let minisat pick the decision
 			decision = 32767
-		elif (decision % 2 == 0): # this is to say that pick decision and assign positive value
+		elif (decision % 2 == 0): # this is to say that pick positive literal
 			decision = int(decision / 2 + 1)
-		else: # this is to say that pick decision and assign negative value
-			decision = 0 - int(decision / 2 + 1) 
-		if (decision in self.actionSet) or (decision == 32767):
+		else: # this is to say that pick negative literal
+			decision = 0 - int(decision / 2 + 1)
+		if (decision in self.actionSet) or decision == 32767:
 			self.S.step(decision)
 			self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-			return self.report_to_agent()
-		else:
-			return self.report_to_agent() 
-
-	"""
-		this function renders the sat problem
-	"""
-	def render(self, mode='human', close=False):
-		pass
-
-class gym_sat_graph_Env(gym.Env):
-	
-	"""
-		this class is a gym environment for Reinforcement Learning algorithms of SAT problems for graph coloring
-		It doesn't do any preprocessing (sorting matrix) or postprocessing (permute the training file)
-		max_clause: the number of rows in state representation
-		max_var: the number of columns in state representation
-	"""
-	def __init__(self, max_clause=300, max_var=90, test_path = None):
-		if test_path == None:
-			self.test_mode = False
-			self.test_path = "graph_rand_train" # Comments by Fei: BE AWARE, the directory of the training files is statically determined in __init__function
-			print("SAT-v3: We are in the training mode of path {}".format(self.test_path))
-		else:
-			self.test_mode = True
-			self.test_path = test_path
-			print("SAT-v3: We are in the test mode of path {}".format(self.test_path))
-		# Get all test files
-		self.test_files = [join(self.test_path, f) for f in listdir(self.test_path) if isfile(join(self.test_path, f))]
-		self.test_file_num = len(self.test_files)
-		self.test_to = 0
-		self.max_clause = max_clause
-		self.max_var = max_var
-		self.observation_space = np.zeros((max_clause, max_var, 1))
-		self.action_space = spaces.Discrete(2*self.max_var)
-		self.score = 0
-		self.exp_av_score = 15 # some randomly initialized initial average value
+		return self.curr_state, self.S.getReward(), self.isSolved, {}
 		
-	"""
-		this function parse the state into sparse matrix with -1 or 1 values
-		Can handle the case when state is empty and the SAT is either broken or solved already
-	"""
-	def parse_state(self):
-		curr_state = np.zeros((self.max_clause, self.max_var, 1), dtype = np.int8)
-		clause_counter = 0 # this tracks the current row-to-write (which is permutable!)
-		actionSet = set() # this set tracks all allowed actions for this state
-		# if S is already Done, should return here.
-		if self.S.getDone():
-			return curr_state, clause_counter, True, actionSet
-		# S is not yet Done, parse and return real state
-		for line in self.S.getState().split('\n'):
-			if line.startswith("p cnf"): # this is the header of a cnf problem # p cnf 20 90
-				header = line.split(" ")
-				num_var = int(header[2])
-				num_clause = int(header[3])
-				assert (num_var <= self.max_var)
-				# assert (num_clause <= self.max_clause) # remove this assert (might be wrong if we learnt too many clauses and restarted)
-			elif line.startswith("c"):
-				continue
-			elif any(char.isdigit() and (not char == '0') for char in line): 
-				# clause data line # -11 -17 20 0
-				literals = line.split(" ")
-				n = len(literals)
-				for j in range(n-1):
-					number = int(literals[j])
-					value = 1 if number > 0 else -1
-					curr_state[clause_counter, abs(number) - 1] = value
-					actionSet.add(number)
-				clause_counter += 1
-				if clause_counter >= self.max_clause: # add a safe guard for overflow of number of clauses
-					print("total number of clauses overflowed max_clause, and were not all represented as state")
-					break;
-		return curr_state, clause_counter, False, actionSet
-
-	"""
-		this function randomly pick a file from the training file set
-	"""
-	def random_pick_satProb(self):
-		if self.test_mode: # in the test mode, just iterate all test files in order
-			filename = self.test_files[self.test_to]
-			self.test_to += 1
-			if self.test_to >= self.test_file_num:
-				self.test_to = 0
-			return filename
-		else: # not in test mode, return a random file in "uf20-91" folder.
-			return self.test_files[random.randint(0, self.test_file_num - 1)]
-
-	"""
-		this function reports to the agent about the environment
-	"""
-	def report_to_agent(self):
-		return self.curr_state, self.S.getReward(), self.isSolved, {}
-
-	"""
-		this function reset the environment and return the initial state
-	"""
-	def reset(self):
-		if self.test_mode: # in test mode, we print the actual score of each SAT problem in test files
-			print(self.score, end=".", flush=True)
-		else: # in training mode, we print an exponential average of scores of randomly picked files
-			self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
-			print(round(self.exp_av_score), end=".", flush = True)
-		self.score = 0
-		filename = self.random_pick_satProb()
-		self.S = GymSolver(filename)
-		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-		return self.curr_state
-
-	"""
-		this function make a step based on parameter input
-	"""
-	def step(self, decision):
-		self.score += 1
-		if (decision < 0): # this is to say that let minisat pick the decision
-			decision = 32767
-		elif (decision % 2 == 0): # this is to say that pick decision and assign positive value
-			decision = int(decision / 2 + 1)
-		else: # this is to say that pick decision and assign negative value
-			decision = 0 - int(decision / 2 + 1) 
-		if (decision in self.actionSet) or (decision == 32767):
-			self.S.step(decision)
-			self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-			return self.report_to_agent()
-		else:
-			return self.report_to_agent() 
-
-	"""
-		this function renders the sat problem
-	"""
-	def render(self, mode='human', close=False):
-		pass
-
-class gym_sat_graph2_Env(gym.Env):
-	
-	"""
-		this class is a gym environment for Reinforcement Learning algorithms of SAT problems for graph coloring 2
-		It doesn't do any preprocessing (sorting matrix) or postprocessing (permute the training file)
-		max_clause: the number of rows in state representation
-		max_var: the number of columns in state representation
-	"""
-	def __init__(self, max_clause=550, max_var=150, test_path = None):
-		if test_path == None:
-			self.test_mode = False
-			self.test_path = "graph2_rand_train" # Comments by Fei: BE AWARE, the directory of the training files is statically determined in __init__function
-			print("SAT-v4: We are in the training mode of path {}".format(self.test_path))
-		else:
-			self.test_mode = True
-			self.test_path = test_path
-			print("SAT-v4: We are in the test mode of path {}".format(self.test_path))
-		# Get all test files
-		self.test_files = [join(self.test_path, f) for f in listdir(self.test_path) if isfile(join(self.test_path, f))]
-		self.test_file_num = len(self.test_files)
-		self.test_to = 0
-		self.max_clause = max_clause
-		self.max_var = max_var
-		self.observation_space = np.zeros((max_clause, max_var, 1))
-		self.action_space = spaces.Discrete(2*self.max_var)
-		self.score = 0
-		self.exp_av_score = 15 # some randomly initialized initial average value
-		
-	"""
-		this function parse the state into sparse matrix with -1 or 1 values
-		Can handle the case when state is empty and the SAT is either broken or solved already
-	"""
-	def parse_state(self):
-		curr_state = np.zeros((self.max_clause, self.max_var, 1), dtype = np.int8)
-		clause_counter = 0 # this tracks the current row-to-write (which is permutable!)
-		actionSet = set() # this set tracks all allowed actions for this state
-		# if S is already Done, should return here.
-		if self.S.getDone():
-			return curr_state, clause_counter, True, actionSet
-		# S is not yet Done, parse and return real state
-		for line in self.S.getState().split('\n'):
-			if line.startswith("p cnf"): # this is the header of a cnf problem # p cnf 20 90
-				header = line.split(" ")
-				num_var = int(header[2])
-				num_clause = int(header[3])
-				assert (num_var <= self.max_var)
-				# assert (num_clause <= self.max_clause) # remove this assert (might be wrong if we learnt too many clauses and restarted)
-			elif line.startswith("c"):
-				continue
-			elif any(char.isdigit() and (not char == '0') for char in line): 
-				# clause data line # -11 -17 20 0
-				literals = line.split(" ")
-				n = len(literals)
-				for j in range(n-1):
-					number = int(literals[j])
-					value = 1 if number > 0 else -1
-					curr_state[clause_counter, abs(number) - 1] = value
-					actionSet.add(number)
-				clause_counter += 1
-				if clause_counter >= self.max_clause: # add a safe guard for overflow of number of clauses
-					print("total number of clauses overflowed max_clause, and were not all represented as state")
-					break;
-		return curr_state, clause_counter, False, actionSet
-
-	"""
-		this function randomly pick a file from the training file set
-	"""
-	def random_pick_satProb(self):
-		if self.test_mode: # in the test mode, just iterate all test files in order
-			filename = self.test_files[self.test_to]
-			self.test_to += 1
-			if self.test_to >= self.test_file_num:
-				self.test_to = 0
-			return filename
-		else: # not in test mode, return a random file in "uf20-91" folder.
-			return self.test_files[random.randint(0, self.test_file_num - 1)]
-
-	"""
-		this function reports to the agent about the environment
-	"""
-	def report_to_agent(self):
-		return self.curr_state, self.S.getReward(), self.isSolved, {}
-
-	"""
-		this function reset the environment and return the initial state
-	"""
-	def reset(self):
-		if self.test_mode: # in test mode, we print the actual score of each SAT problem in test files
-			print(self.score, end=".", flush=True)
-		else: # in training mode, we print an exponential average of scores of randomly picked files
-			self.exp_av_score = self.exp_av_score * 0.98 + self.score * 0.02
-			print(round(self.exp_av_score), end=".", flush = True)
-		self.score = 0
-		filename = self.random_pick_satProb()
-		self.S = GymSolver(filename)
-		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-		return self.curr_state
-
-	"""
-		this function make a step based on parameter input
-	"""
-	def step(self, decision):
-		self.score += 1
-		if (decision < 0): # this is to say that let minisat pick the decision
-			decision = 32767
-		elif (decision % 2 == 0): # this is to say that pick decision and assign positive value
-			decision = int(decision / 2 + 1)
-		else: # this is to say that pick decision and assign negative value
-			decision = 0 - int(decision / 2 + 1) 
-		if (decision in self.actionSet) or (decision == 32767):
-			self.S.step(decision)
-			self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-			return self.report_to_agent()
-		else:
-			return self.report_to_agent() 
-
-	"""
-		this function renders the sat problem
-	"""
-	def render(self, mode='human', close=False):
-		pass
