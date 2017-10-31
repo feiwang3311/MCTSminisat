@@ -106,6 +106,7 @@ Solver::Solver() :
 
 Solver::~Solver()
 {
+    // Comments by Fei: added to generate states for gym environment.
     if (env_state_size > 0) {
         delete[] env_state;
         env_state = 0;
@@ -228,11 +229,11 @@ bool Solver::satisfied(const Clause& c) const {
     for (int i = 0; i < c.size(); i++)
         if (value(c[i]) == l_True)
             return true;
-    return false; }
+    return false; 
+}
 
 
 // Revert to the state at given level (keeping all assignment at 'level' but not beyond).
-//
 void Solver::cancelUntil(int level) {
     if (decisionLevel() > level){
         for (int c = trail.size()-1; c >= trail_lim[level]; c--){
@@ -240,11 +241,13 @@ void Solver::cancelUntil(int level) {
             assigns [x] = l_Undef;
             if (phase_saving > 1 || (phase_saving == 1 && c > trail_lim.last()))
                 polarity[x] = sign(trail[c]);
-            insertVarOrder(x); }
+            insertVarOrder(x); 
+        }
         qhead = trail_lim[level];
         trail.shrink(trail.size() - trail_lim[level]);
         trail_lim.shrink(trail_lim.size() - level);
-    } }
+    } 
+}
 
 
 //=================================================================================================

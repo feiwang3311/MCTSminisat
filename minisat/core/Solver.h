@@ -53,7 +53,7 @@ public:
     bool    addClause (Lit p, Lit q);                           // Add a binary clause to the solver. 
     bool    addClause (Lit p, Lit q, Lit r);                    // Add a ternary clause to the solver. 
     bool    addClause (Lit p, Lit q, Lit r, Lit s);             // Add a quaternary clause to the solver. 
-    bool    addClause_(      vec<Lit>& ps);                     // Add a clause to the solver without making superflous internal copy. Will
+    bool    addClause_(vec<Lit>& ps);                           // Add a clause to the solver without making superflous internal copy. Will
                                                                 // change the passed vector 'ps'.
 
     // Solving:
@@ -83,7 +83,7 @@ public:
     void    snapState     (const char *file, const vec<Lit>& assumps, const Lit next);
     void    snapState     (FILE* f, Clause& c, vec<Var>& map, Var& max);
 
-    void    saveState(const vec<Lit>& assumps); // Comments by Fei: save the state in field env_state.
+    void    saveState(const vec<Lit>& assumps); // Comments by Fei: save the state in field env_state (still in DIMACS format)
     int     saveState(Clause& c, int used_space); // Comments by Fei: sub-routine to a clause
     int     handle_writting_state(int temp, int used_space); // Comments by Fei: sub-routine to handle snprintf.
 

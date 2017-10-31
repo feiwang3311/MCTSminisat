@@ -164,7 +164,7 @@ class Clause {
                 data[header.size].act = 0;
             else
                 calcAbstraction();
-    }
+        }
     }
 
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
