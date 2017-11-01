@@ -148,6 +148,7 @@ class minisat_wrapper(object):
 		self.sat_dir = sat_dir
 		self.sat_files = [join(self.sat_dir, f) for f in listdir(self.sat_dir) if isfile(join(self.sat_dir, f))]
 		self.sat_file_num = len(self.sat_files)
+
 		self.max_clause = max_clause
 		self.max_var = max_var
 		self.observation_space = np.zeros((max_clause, max_var, 2))
