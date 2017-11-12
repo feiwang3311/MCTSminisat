@@ -34,6 +34,8 @@ namespace Minisat {
 //=================================================================================================
 // Solver -- the main class:
 
+class shadow; // Comments by Fei: add this class for simulation
+
 class Solver {
 public:
 
@@ -41,6 +43,9 @@ public:
     //
     Solver();
     virtual ~Solver();
+
+    // Comments by Fei: add shadow as a friend class
+    friend class shadow;
 
     // Problem specification:
     //
@@ -75,16 +80,16 @@ public:
     TrailIterator  trailBegin()   const;
     TrailIterator  trailEnd  ()   const;
 
-    void    toDimacs     (FILE* f, const vec<Lit>& assumps);            // Write CNF to file in DIMACS-format.
+    void    toDimacs     (FILE* f, const vec<Lit>& assumps);                  // Write CNF to file in DIMACS-format.
     void    toDimacs     (const char *file, const vec<Lit>& assumps);
     void    toDimacs     (FILE* f, Clause& c, vec<Var>& map, Var& max);
 
-    void    snapState     (FILE* f, const vec<Lit>& assumps, const Lit next);            // Comments by Fei: snap the state to file in DIMACS-format.
+    void    snapState     (FILE* f, const vec<Lit>& assumps, const Lit next); // Comments by Fei: snap the state to file in DIMACS-format.
     void    snapState     (const char *file, const vec<Lit>& assumps, const Lit next);
     void    snapState     (FILE* f, Clause& c, vec<Var>& map, Var& max);
 
-    void    saveState(const vec<Lit>& assumps); // Comments by Fei: save the state in field env_state (still in DIMACS format)
-    int     saveState(Clause& c, int used_space); // Comments by Fei: sub-routine to a clause
+    void    saveState(const vec<Lit>& assumps);              // Comments by Fei: save the state in field env_state (still in DIMACS format)
+    int     saveState(Clause& c, int used_space);            // Comments by Fei: sub-routine to a clause
     int     handle_writting_state(int temp, int used_space); // Comments by Fei: sub-routine to handle snprintf.
 
 
@@ -154,6 +159,7 @@ public:
 
     int       learntsize_adjust_start_confl;
     double    learntsize_adjust_inc;
+    float*    write_state_to;     // Comments by Fei. this is the pointer to array of state (memory is in RL algorithm)
     char*     snapTo;             // Comments by Fei. this is the filename to write down snapState.
     bool      env_hold;           // Comments by Fei. this is the for adapting solver to Reinforcement Learning environment. 
                                   // Comments by Fei. When env_hold is true, the system is holding on the next decision variable!
@@ -168,10 +174,20 @@ public:
     lbool     remember_status;    // Comments by Fei. This is to replace the local variable called "status" in solve_()
     CRef      confl;              // Comments by Fei. This is to replace the local variable in search(). No change of name!
     Lit       field_of_next;      // Comments by Fei. This is to replace the local variable in search().
-    vec<Var> extra_frozen;        // Comments by Fei. This is to replace the local variable in simple solve_().
-    lbool    result = l_True;     // Comments by Fei. This is to replace the local variable in simple solve_().
+    vec<Var>  extra_frozen;       // Comments by Fei. This is to replace the local variable in simple solve_().
+    lbool     result = l_True;    // Comments by Fei. This is to replace the local variable in simple solve_().
+
+    // Comments by Fei: add a root_shadow and a leaf_shadow (the access from minisat to tree of shadows)
+    shadow* root_shadow; // this is the shadow at the root of MCTS 
+    shadow* leaf_shadow; // this is the current active (needs state evaluation) of the MCTS
+    void reclaim_memory(shadow*);
+
     // Comments by Fei. This is short-circuit for pickBranchLit, so I can use it as public fuction
     Lit default_pickLit() {return pickBranchLit();} 
+
+    // Comments by Fei. This is the field method for simulating MCTS, 
+    int simulate(float* array, float* pi, float v);
+    void get_visit_count(float* array);
 
     // Statistics: (read-only member variable)
     //

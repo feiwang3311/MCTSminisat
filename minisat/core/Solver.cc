@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "minisat/mtl/Sort.h"
 #include "minisat/utils/System.h"
 #include "minisat/core/Solver.h"
+#include "minisat/core/shadow.h"
 
 using namespace Minisat;
 
@@ -78,6 +79,10 @@ Solver::Solver() :
     //
   , learntsize_adjust_start_confl (100)
   , learntsize_adjust_inc         (1.5)
+
+    // for shadows
+  , root_shadow (NULL)
+  , leaf_shadow (NULL)  
 
     // Statistics: (formerly in 'SolverStats')
     //
@@ -602,7 +607,7 @@ void Solver::reduceDB()
             learnts[j++] = learnts[i];
     }
     learnts.shrink(i - j);
-    checkGarbage();
+    // checkGarbage(); // Comments: diabled for now for small SAT problems.
 }
 
 
@@ -718,7 +723,7 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
     // vec<Lit>    learnt_clause; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
     starts++;
 
-    while (true){
+    while (true) {
         confl = propagate(); // Comments by Fei: changed to field variable
         if (confl != CRef_Undef){
             // CONFLICT
@@ -756,14 +761,15 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                            (int)max_learnts, nLearnts(), (double)learnts_literals/nLearnts(), progressEstimate()*100);
             }
 
-        }else{
-            // NO CONFLICT
+        } else {
+            // NO CONFLICT 
+            /* //// Comments by Fei: force never restart (simulation burden is too large if restart)
             if ((number_of_conflicts >= 0 && conflictCounts >= number_of_conflicts) || !withinBudget()){ // Comments by Fei: usage of local variables are changed to usage of global variables
                 // Reached bound on number of conflicts:
                 progress_estimate = progressEstimate();
                 cancelUntil(0);
                 return l_Undef; 
-            }
+            } */
 
             // Simplify the set of problem clauses:
             if (decisionLevel() == 0 && !simplify()) { 
@@ -775,6 +781,7 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 reduceDB();
 
             field_of_next = lit_Undef; // Comments by Fei: change to field variable
+            
             while (decisionLevel() < assumptions.size()){
                 // Perform user provided assumption:
                 Lit p = assumptions[decisionLevel()];
@@ -788,15 +795,42 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                     field_of_next = p; // Comments by Fei: change to field variable
                     break;
                 }
-            }
+            } 
 
-            if (field_of_next == lit_Undef){ // Comments by Fei: change to field variable
+            if (field_of_next == lit_Undef) { // Comments by Fei: change to field variable
                 // New variable decision:
                 decisions++;
                 // Comments by Fei: as an RL env, the function should return now, and report the state so that an agent can make the next decision
                 // Comments by Fei: this is the old way to save the state (should optimize it later)
                 // snapState(snapTo, assumptions, mkLit(0,false));
                 // Comments by Fei: this is the new way to save the state. 
+                assert (leaf_shadow == NULL && "at the start step (whether initial step or continued step), leaf_shadow should be NULL");
+                if (root_shadow == NULL) { 
+                    // this is the init stage, no root_shadow yet.
+                    // initialize a shadow object for both the root and leaf pointer, call root_shadow's generate_state function
+                    // to write the state to "write_state_to" pointer. This "write_state_to" pointer is pointing to a numpy array, and 
+                    // it needs to be set up by the caller (GymSolver) before step() is called
+                    // if generate_state returns false, it means that state is solved and no further branching is needed.
+                    root_shadow = leaf_shadow = new shadow(this);
+                    bool flag = root_shadow -> generate_state(write_state_to);
+                    if (!flag) return l_True; // already solved!
+                } else { 
+                    // this is the step stage. make judgement to the current situation (ok?) 
+                    assert (ok && "solver is in contradictory state");
+                    // reshape the tree of shadows by calling next_root() function from the root shadow
+                    shadow* temp = root_shadow;
+                    root_shadow = root_shadow -> next_root(toInt(agent_decision)); 
+                    // need to deal with "temp" (a tree of useless shadow objects, needs to reclaim the memory recursively)
+                    reclaim_memory(temp);
+                    // check if the state is solved by checking if root shadow is NULL
+                    if (!root_shadow) return l_True;
+                    // bool flag = root_shadow -> generate_state(write_state_to); 
+                } 
+                env_hold = true;
+                env_reward = -1.0;
+                return l_Undef;
+
+                /*
                 try {
                     saveState(assumptions);
                 } catch (const char* msg) {
@@ -810,10 +844,11 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                     return l_True; // Comments by Fei: this only happens if solved! terminate and stating SAT (the model may not yet be complete.)
                     // just NOTE: original design of miniSAT doesn't stop if number of unsalved clauses is 0. It will keep assigning values and finish the model.
                 }
-
+                                
                 env_hold = true; // Comments by Fei: need to set env_hold to true, because we are holding on to the problem! 
                 env_reward = -1.0;
                 return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
+                */
 label2:
                 // next = pickBranchLit();
                 field_of_next = agent_decision; // Comments by Fei: now we use agent_decision! // Comments by Fei: change to field variable
@@ -837,6 +872,61 @@ label2:
     }
 }
 
+// Comments by Fei. This is the field method for simulating MCTS.
+// return the state of the current simulation 
+// 0 -> 00: no more simulation needed (meet the size constraint), no more state evaluation needed (leaf_shadow is NULL)
+// 1 -> 01: no more simulation needed (meet the size constraint), the leaf_shadow state still needs to be evaluated
+// 2 -> 10: more simulation needed (dismeet the size constraint), no more state evaluation needed (leaf shadow is NULL-probably due to finished state)
+// 3 -> 11: more simulation needed (dismeet the size constraint), the leaf_shadow state still needs to be evaluated
+// argument array is where the new state will be written to (if there is one to be evaluated)
+// argument pi_input and v are the evaluated values for the last state returned. They should be passed on to the leaf_shadow if leaf_shadow is not NULL
+int Solver::simulate(float* array, float* pi_input, float v) {
+    // printf("reached the Solver::simulate function\n");
+    if (leaf_shadow != NULL) {
+        // pass the pi to the right leaf node
+        for (int i = 0; i < Hyper_Const::nact; i++) {
+            leaf_shadow -> pi[i] = pi_input[i];
+        }
+        // back propagate v for parents of the leaf node
+        shadow* temp = leaf_shadow;
+        while (temp -> parent != NULL) {
+            temp = temp -> parent;
+            temp -> qu[ temp -> index_child_last_pick ] += v;
+            // temp -> sumN += 1; this is already done at exploration stage
+            // temp -> nn[ temp -> index_child_last_pick ] += 1; this is already done at exploration stage
+        }
+    }
+
+    if (root_shadow -> sumN >= Hyper_Const::MCTS_size_lim) {
+        leaf_shadow = NULL;
+        return 0; // no need to eval array (state), no need to simulate more
+    }
+
+    // do a simulation step (call next_to_explore) from the root_shadow (if return is NULL, MCTS stepped into a finished state)
+    leaf_shadow = root_shadow -> next_to_explore(array);
+    while (leaf_shadow == NULL) {
+        for (shadow* temp = root_shadow; temp != NULL; temp = temp -> childern[temp->index_child_last_pick]) {
+            temp -> qu [temp -> index_child_last_pick] += 1.0; // finished state return v of 1.0 (highest)
+        }
+        if (root_shadow -> sumN >= Hyper_Const::MCTS_size_lim) break;
+        leaf_shadow = root_shadow -> next_to_explore(array);
+    }
+    return int(leaf_shadow != NULL) + int(root_shadow -> sumN < Hyper_Const::MCTS_size_lim) * 2;
+}
+
+void Solver::reclaim_memory(shadow* root) {
+    for (int i = 0; i < Hyper_Const::nact; i++) {
+        if (root -> childern[i]) {
+            reclaim_memory(root -> childern[i]);
+        }
+    }
+    root -> ~shadow();
+}
+
+// this function passes array to the root_shadow, who then write the nn array (visit count) to array
+void Solver::get_visit_count(float* array) {
+    root_shadow -> get_visit_count(array);
+}
 
 double Solver::progressEstimate() const
 {
@@ -1235,11 +1325,11 @@ void Solver::printStats() const
 {
     double cpu_time = cpuTime();
     double mem_used = memUsedPeak();
-    printf("restarts              : %"PRIu64"\n", starts);
-    printf("conflicts             : %-12"PRIu64"   (%.0f /sec)\n", conflicts   , conflicts   /cpu_time);
-    printf("decisions             : %-12"PRIu64"   (%4.2f %% random) (%.0f /sec)\n", decisions, (float)rnd_decisions*100 / (float)decisions, decisions   /cpu_time);
-    printf("propagations          : %-12"PRIu64"   (%.0f /sec)\n", propagations, propagations/cpu_time);
-    printf("conflict literals     : %-12"PRIu64"   (%4.2f %% deleted)\n", tot_literals, (max_literals - tot_literals)*100 / (double)max_literals);
+    printf("restarts              : %" PRIu64 "\n", starts);
+    printf("conflicts             : %-12" PRIu64 "   (%.0f /sec)\n", conflicts   , conflicts   /cpu_time);
+    printf("decisions             : %-12" PRIu64 "   (%4.2f %% random) (%.0f /sec)\n", decisions, (float)rnd_decisions*100 / (float)decisions, decisions   /cpu_time);
+    printf("propagations          : %-12" PRIu64 "   (%.0f /sec)\n", propagations, propagations/cpu_time);
+    printf("conflict literals     : %-12" PRIu64 "   (%4.2f %% deleted)\n", tot_literals, (max_literals - tot_literals)*100 / (double)max_literals);
     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
     printf("CPU time              : %g s\n", cpu_time);
 }

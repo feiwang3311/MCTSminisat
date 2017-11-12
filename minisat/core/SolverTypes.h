@@ -180,7 +180,7 @@ class Clause {
                 data[header.size].act = from.data[header.size].act;
             else 
                 data[header.size].abs = from.data[header.size].abs;
-    }
+        }
     }
 
 public:
@@ -189,7 +189,8 @@ public:
         uint32_t abstraction = 0;
         for (int i = 0; i < size(); i++)
             abstraction |= 1 << (var(data[i].lit) & 31);
-        data[header.size].abs = abstraction;  }
+        data[header.size].abs = abstraction;  
+    }
 
 
     int          size        ()      const   { return header.size; }
@@ -211,6 +212,8 @@ public:
     Lit          operator [] (int i) const   { return data[i].lit; }
     operator const Lit* (void) const         { return (Lit*)data; }
 
+    // Comments by Fei: add a const version of activity()
+    const float& activity    () const        { assert(header.has_extra); return data[header.size].act; }
     float&       activity    ()              { assert(header.has_extra); return data[header.size].act; }
     uint32_t     abstraction () const        { assert(header.has_extra); return data[header.size].abs; }
 
@@ -240,25 +243,24 @@ class ClauseAllocator
 
     void moveTo(ClauseAllocator& to){
         to.extra_clause_field = extra_clause_field;
-        ra.moveTo(to.ra); }
+        ra.moveTo(to.ra); 
+    }
 
-    CRef alloc(const vec<Lit>& ps, bool learnt = false)
-    {
+    CRef alloc(const vec<Lit>& ps, bool learnt = false) {
         assert(sizeof(Lit)      == sizeof(uint32_t));
         assert(sizeof(float)    == sizeof(uint32_t));
         bool use_extra = learnt | extra_clause_field;
         CRef cid       = ra.alloc(clauseWord32Size(ps.size(), use_extra));
         new (lea(cid)) Clause(ps, use_extra, learnt);
-
         return cid;
     }
 
-    CRef alloc(const Clause& from)
-    {
+    CRef alloc(const Clause& from) {
         bool use_extra = from.learnt() | extra_clause_field;
         CRef cid       = ra.alloc(clauseWord32Size(from.size(), use_extra));
         new (lea(cid)) Clause(from, use_extra);
-        return cid; }
+        return cid;
+    }
 
     uint32_t size      () const      { return ra.size(); }
     uint32_t wasted    () const      { return ra.wasted(); }

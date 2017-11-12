@@ -95,6 +95,70 @@ except __builtin__.Exception:
         pass
     _newclass = 0
 
+class SwigPyIterator(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, SwigPyIterator, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, SwigPyIterator, name)
+
+    def __init__(self, *args, **kwargs):
+        raise AttributeError("No constructor defined - class is abstract")
+    __repr__ = _swig_repr
+    __swig_destroy__ = _GymSolver.delete_SwigPyIterator
+    __del__ = lambda self: None
+
+    def value(self):
+        return _GymSolver.SwigPyIterator_value(self)
+
+    def incr(self, n=1):
+        return _GymSolver.SwigPyIterator_incr(self, n)
+
+    def decr(self, n=1):
+        return _GymSolver.SwigPyIterator_decr(self, n)
+
+    def distance(self, x):
+        return _GymSolver.SwigPyIterator_distance(self, x)
+
+    def equal(self, x):
+        return _GymSolver.SwigPyIterator_equal(self, x)
+
+    def copy(self):
+        return _GymSolver.SwigPyIterator_copy(self)
+
+    def next(self):
+        return _GymSolver.SwigPyIterator_next(self)
+
+    def __next__(self):
+        return _GymSolver.SwigPyIterator___next__(self)
+
+    def previous(self):
+        return _GymSolver.SwigPyIterator_previous(self)
+
+    def advance(self, n):
+        return _GymSolver.SwigPyIterator_advance(self, n)
+
+    def __eq__(self, x):
+        return _GymSolver.SwigPyIterator___eq__(self, x)
+
+    def __ne__(self, x):
+        return _GymSolver.SwigPyIterator___ne__(self, x)
+
+    def __iadd__(self, n):
+        return _GymSolver.SwigPyIterator___iadd__(self, n)
+
+    def __isub__(self, n):
+        return _GymSolver.SwigPyIterator___isub__(self, n)
+
+    def __add__(self, n):
+        return _GymSolver.SwigPyIterator___add__(self, n)
+
+    def __sub__(self, *args):
+        return _GymSolver.SwigPyIterator___sub__(self, *args)
+    def __iter__(self):
+        return self
+SwigPyIterator_swigregister = _GymSolver.SwigPyIterator_swigregister
+SwigPyIterator_swigregister(SwigPyIterator)
+
 class GymSolver(_object):
     __swig_setmethods__ = {}
     __setattr__ = lambda self, name, value: _swig_setattr(self, GymSolver, name, value)
@@ -109,8 +173,20 @@ class GymSolver(_object):
         except __builtin__.Exception:
             self.this = this
 
-    def step(self, arg2):
-        return _GymSolver.GymSolver_step(self, arg2)
+    def init(self, array):
+        return _GymSolver.GymSolver_init(self, array)
+
+    def simulate(self, array, pi, v):
+        return _GymSolver.GymSolver_simulate(self, array, pi, v)
+
+    def get_visit_count(self, array):
+        return _GymSolver.GymSolver_get_visit_count(self, array)
+
+    def set_decision(self, decision):
+        return _GymSolver.GymSolver_set_decision(self, decision)
+
+    def step(self, array):
+        return _GymSolver.GymSolver_step(self, array)
 
     def getReward(self):
         return _GymSolver.GymSolver_getReward(self)
@@ -124,119 +200,7 @@ class GymSolver(_object):
     __del__ = lambda self: None
 GymSolver_swigregister = _GymSolver.GymSolver_swigregister
 GymSolver_swigregister(GymSolver)
+
 # This file is compatible with both classic and new-style classes.
 
-import numpy as np
-import random
-from os import listdir
-from os.path import isfile, join
-class minisat_wrapper(object):
-	"""
-		this class is a simple wrapper of minisat instance, used in MCTS training as perfect information
-	"""
-	def __init__(self, sat_dir, max_clause = 100, max_var = 20, mode = 'random'):
-		"""
-			sat_dir: directory to the sat problems
-			max_clause: number of rows for the final state
-			max_var: number of columns for the final state
-			mode: 'random' => at reset, randomly pick a file from directory
-				  'iterate' => at reset, iterate each file one by one
-				  'repeat^n' => at reset, give the same problem n times before iterates to the next one
-				  'filename' => at reset, repeatly use the given filename
-		"""
-		print("SAT-v0: at dir {} max_clause {} max_var {} mode {}".format(sat_dir, max_clause, max_var, mode))
-		self.sat_dir = sat_dir
-		self.sat_files = [join(self.sat_dir, f) for f in listdir(self.sat_dir) if isfile(join(self.sat_dir, f))]
-		self.sat_file_num = len(self.sat_files)
 
-		self.max_clause = max_clause
-		self.max_var = max_var
-		self.observation_space = np.zeros((max_clause, max_var, 2))
-		self.action_space = max_var * 2
-		self.mode = mode
-		if mode.startswith("repeat^"):
-			self.repeat_limit = int(mode.split('^')[1])
-		elif (mode == "random" or mode == "iterate"): pass
-		else:
-			try:
-				self.file_index = self.sat_files.index(join(self.sat_dir, self.mode))
-			except ValueError:
-				assert False, "file {} in not in dir {}".format(mode, sat_dir)
-		# this class is stateful, by these fields
-		self.repeat_counter = 0
-		self.iterate_counter = 0
-
-	def parse_state(self):
-		"""
-			this function parse the state into sparse matrix (max_clause, max_var, 2) with True for a var in clause 
-		"""
-		curr_state = np.zeros((self.max_clause, self.max_var, 2), dtype=bool)
-		clause_counter = 0
-		actionSet = set()
-		if not self.S.getDone():
-			for line in self.S.getState().split('\n'): # S.getState() gives a string representation of state in cnf format
-				if line.startswith("p cnf"):
-					header = line.split(" ")
-					num_var = int(header[2])
-					num_clause = int(header[3])
-					assert (num_var <= self.max_var), "num var superseded max var"
-				elif line.startswith("c"):
-					continue
-				elif any(char.isdigit() and (not char == '0') for char in line):
-					literals = line.split(" ")
-					n = len(literals)
-					for j in range(n-1):
-						number = int(literals[j])
-						nz = 0 if number > 0 else 1
-						curr_state[clause_counter, abs(number) - 1, nz] = True
-						actionSet.add(number)
-					clause_counter += 1
-					if clause_counter >= self.max_clause:
-						break
-		return curr_state, clause_counter, self.S.getDone(), actionSet
-
-	def reset(self):
-		"""
-			this function reset the minisat by the rule of mode
-		"""
-		if self.mode == "random":
-			pickfile = self.sat_files[random.randint(0, self.sat_file_num - 1)]
-			self.repeat_counter += 1
-		elif self.mode == "iterate":
-			pickfile = self.sat_files[self.iterate_counter]
-			self.iterate_counter += 1
-			if self.iterate_counter >= self.sat_file_num:
-				self.iterate_counter = 0
-				self.repeat_counter += 1
-				print("WARNING: iteration of all files in dir {} is done, will restart iteration".format(self.sat_dir))
-		elif self.mode.startswith("repeat^"):
-			pickfile = self.sat_files[self.iterate_counter]
-			self.repeat_counter += 1
-			if self.repeat_counter >= self.repeat_limit:
-				self.repeat_counter = 0
-				self.iterate_counter += 1
-				if self.iterate_counter >= self.sat_file_num:
-					self.iterate_counter = 0
-					print("WARNING: repeated iteration of all files in dir {} is done, will restart iteration".format(self.sat_dir))
-		else:
-			pickfile = self.sat_files[self.file_index]
-			self.repeat_counter += 1
-		self.S = GymSolver(pickfile)
-		self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-		return self.curr_state
-
-	def step(self, decision):
-		"""
-			this function makes a step based on the parameter input
-		"""
-		if (decision < 0): # this is to say that let minisat pick the decision
-			decision = 32767
-		elif (decision % 2 == 0): # this is to say that pick positive literal
-			decision = int(decision / 2 + 1)
-		else: # this is to say that pick negative literal
-			decision = 0 - int(decision / 2 + 1)
-		if (decision in self.actionSet) or decision == 32767:
-			self.S.step(decision)
-			self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
-		return self.curr_state, self.S.getReward(), self.isSolved, {}
-		

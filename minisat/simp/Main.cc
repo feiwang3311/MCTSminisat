@@ -53,6 +53,7 @@ static void SIGINT_exit(int) {
 
 int main(int argc, char** argv)
 {
+
     try {
         setUsageHelp("USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");
         setX86FPUPrecision();
@@ -137,7 +138,32 @@ int main(int argc, char** argv)
         if (solve){
             vec<Lit> dummy;
             // Comments by Fei: Now the solveLimited() function really just initialize the problem. It needs steps to finish up!
+            /* hack from here
+            printf("hack in main.cc\n");
+            
+            float* array = new float[4000]();
+            S.write_state_to = array;
             ret = S.solveLimited(dummy);
+            for (int i = 0 ; i < 4000; i++) 
+                if (array[i] > 0.5)
+                    printf("%d:%f ", i, array[i]);
+            printf("\n\n\n\n\n");
+            delete[] array;
+
+            array = new float[4000]();
+            float* pi = new float[40]();
+            for (int i = 0; i < 40 ; i++)
+                pi[i] = 1.0f/40.0f;
+            float * v = new float[1]();
+            v[0] = 0.01f;
+            printf("going to write to address %p\n", array);
+            S.simulate(array, pi, v[0]);
+            for (int i = 0; i < 4000; i++)
+                if (array[i] > 0.5)
+                    printf("%d::%f ", i, array[i]);
+            printf("end of print\n");
+            exit(0);
+            */
             while (S.env_hold) { // Comments by Fei: SAT is not solved yet! it is on hold
                 S.agent_decision = S.default_pickLit(); // Comments by Fei: set up agent_decision (for now it is the same as pickBranchLit heuristics)
                 ret = S.step(); // this is doing one more step!

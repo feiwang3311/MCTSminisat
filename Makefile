@@ -59,7 +59,7 @@ SOMAJOR=2
 SOMINOR=1
 SORELEASE?=.0#   Declare empty to leave out from library file name.
 
-MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra
+MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra -std=c++11 
 MINISAT_LDFLAGS  = -Wall -lz
 
 ECHO=@echo
@@ -102,7 +102,7 @@ $(BUILD_DIR)/release/bin/$(MINISAT_CORE):	MINISAT_LDFLAGS += --static $(MINISAT_
 
 ## Executable dependencies
 $(BUILD_DIR)/release/bin/$(MINISAT):	 	$(BUILD_DIR)/release/minisat/simp/Main.o $(BUILD_DIR)/release/lib/$(MINISAT_SLIB)
-$(BUILD_DIR)/debug/bin/$(MINISAT):	 	$(BUILD_DIR)/debug/minisat/simp/Main.o $(BUILD_DIR)/debug/lib/$(MINISAT_SLIB)
+$(BUILD_DIR)/debug/bin/$(MINISAT):	 	    $(BUILD_DIR)/debug/minisat/simp/Main.o $(BUILD_DIR)/debug/lib/$(MINISAT_SLIB)
 $(BUILD_DIR)/profile/bin/$(MINISAT):	 	$(BUILD_DIR)/profile/minisat/simp/Main.o $(BUILD_DIR)/profile/lib/$(MINISAT_SLIB)
 # need the main-file be compiled with fpic?
 $(BUILD_DIR)/dynamic/bin/$(MINISAT):	 	$(BUILD_DIR)/dynamic/minisat/simp/Main.o $(BUILD_DIR)/dynamic/lib/$(MINISAT_DLIB)
@@ -196,7 +196,7 @@ install-bin: $(BUILD_DIR)/dynamic/bin/$(MINISAT)
 	$(INSTALL) -m 755 $(BUILD_DIR)/dynamic/bin/$(MINISAT) $(DESTDIR)$(bindir)
 
 python-wrap: $(BUILD_DIR)/dynamic/lib/$(MINISAT_DLIB).$(SOMAJOR).$(SOMINOR)$(SORELEASE) $(SRCS)
-	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.cxx -o minisat/gym/GymSolver_wrap.o -I. -I/usr/include/python3.5m
+	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.c++ -o minisat/gym/GymSolver_wrap.o -I. -I/usr/include/python3.5m
 	g++ -shared -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/dynamic/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so
 
 clean:
