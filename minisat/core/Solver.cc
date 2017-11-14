@@ -806,17 +806,25 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 // Comments by Fei: this is the new way to save the state. 
                 assert (leaf_shadow == NULL && "at the start step (whether initial step or continued step), leaf_shadow should be NULL");
                 if (root_shadow == NULL) { 
+                    // this is step without shadow tree (or inital stage, no shadow tree yet)
+                    // construction of shadow tree is the responsibility of the Solver::simulate() function
+                    // in step/reset/search() function here, we just deal with saving state (if there is no tree)
+                    bool flag = generate_state(write_state_to);
+                    if (!flag) {
+                        return l_True; // already solved!
+                    }
+
                     // this is the init stage, no root_shadow yet.
                     // initialize a shadow object for both the root and leaf pointer, call root_shadow's generate_state function
                     // to write the state to "write_state_to" pointer. This "write_state_to" pointer is pointing to a numpy array, and 
                     // it needs to be set up by the caller (GymSolver) before step() is called
                     // if generate_state returns false, it means that state is solved and no further branching is needed.
-                    root_shadow = leaf_shadow = new shadow(this);
-                    bool flag = root_shadow -> generate_state(write_state_to);
-                    if (!flag) return l_True; // already solved!
+                    // root_shadow = leaf_shadow = new shadow(this);
+                    // bool flag = root_shadow -> generate_state(write_state_to);
+                    // if (!flag) return l_True; // already solved!
                 } else { 
-                    // this is the step stage. make judgement to the current situation (ok?) 
-                    assert (ok && "solver is in contradictory state");
+                    // this is the step stage with shadow trees already established (need to maintain the shadow tree, no need to generate_state).
+                    assert (ok && "solver is in contradictory state"); // make judgement to the current situation (ok?) 
                     // reshape the tree of shadows by calling next_root() function from the root shadow
                     shadow* temp = root_shadow;
                     root_shadow = root_shadow -> next_root(toInt(agent_decision)); 
@@ -824,7 +832,7 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                     reclaim_memory(temp);
                     // check if the state is solved by checking if root shadow is NULL
                     if (!root_shadow) return l_True;
-                    // bool flag = root_shadow -> generate_state(write_state_to); 
+                    bool flag = generate_state(write_state_to); 
                 } 
                 env_hold = true;
                 env_reward = -1.0;
@@ -850,6 +858,11 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
                 */
 label2:
+                /* Comments by Fei: since the user (RL algorithm) is now picking the literals, there is a small chance that the algorithm
+                makes a mistake and step on an invalid literal (a literal that already assigned false).
+                As an extra level of protection, we prevent invalid steps from being carried on here!! */
+                if (value(agent_decision) != l_Undef) return l_Undef;
+
                 // next = pickBranchLit();
                 field_of_next = agent_decision; // Comments by Fei: now we use agent_decision! // Comments by Fei: change to field variable
                 //printf("pick_var %s%d\n", sign(field_of_next)? "-" : "", var(field_of_next) + 1);
@@ -881,6 +894,9 @@ label2:
 // argument array is where the new state will be written to (if there is one to be evaluated)
 // argument pi_input and v are the evaluated values for the last state returned. They should be passed on to the leaf_shadow if leaf_shadow is not NULL
 int Solver::simulate(float* array, float* pi_input, float v) {
+    // simulate is responsible to set up shadow trees if there is none at the entry of this function
+    if (root_shadow == NULL) root_shadow = leaf_shadow = new shadow(this);
+
     // printf("reached the Solver::simulate function\n");
     if (leaf_shadow != NULL) {
         // pass the pi to the right leaf node
@@ -905,9 +921,10 @@ int Solver::simulate(float* array, float* pi_input, float v) {
     // do a simulation step (call next_to_explore) from the root_shadow (if return is NULL, MCTS stepped into a finished state)
     leaf_shadow = root_shadow -> next_to_explore(array);
     while (leaf_shadow == NULL) {
+        /* Comments by Fei: change of mind >>>> finished state should return 0.0 (average, or no-information value)
         for (shadow* temp = root_shadow; temp != NULL; temp = temp -> childern[temp->index_child_last_pick]) {
             temp -> qu [temp -> index_child_last_pick] += 1.0; // finished state return v of 1.0 (highest)
-        }
+        } */
         if (root_shadow -> sumN >= Hyper_Const::MCTS_size_lim) break;
         leaf_shadow = root_shadow -> next_to_explore(array);
     }
@@ -1319,6 +1336,38 @@ int Solver::handle_writting_state(int temp, int used_space) {
     else return temp + used_space;
 }
 
+// helper function for generate_state (write state to a 1D array and returns the next col to write to)
+int Solver::write_clause(const Clause& c, int index_col, float* array) {
+    if (satisfied(c)) return index_col;
+    for (int i = 0; i < c.size(); i++) {
+        if (value(c[i]) != l_False) {
+            int index_row = var(c[i]); int index_z = int(sign(c[i]));
+            int index = index_z + index_row * Hyper_Const::dim2 + index_col * Hyper_Const::dim1 * Hyper_Const::dim2;
+            array[index] = 1.0;
+        }
+    }
+    return index_col + 1;
+}
+// write state in tensor "array" as side effect (if too many clauses to write, cut off by dim0)
+// return true if state is not empty (not solved), false otherwise
+bool Solver::generate_state(float* array) {
+    int index_col = 0;
+    for (int i = 0; i < clauses.size() && index_col < Hyper_Const::dim0; i++) 
+        index_col = write_clause(ca[clauses[i]], index_col, array);
+    // write learnts in array
+    for (int i = 0; i < learnts.size() && index_col < Hyper_Const::dim0; i++)
+        index_col = write_clause(ca[learnts[i]], index_col, array);
+    printf("clause %d, learnts %d\n", clauses.size(), learnts.size());
+    for (int i = 0; i < trail.size(); i++) {
+        printf("%d_", trail[i].x);
+    }
+    printf("\n");
+    for (int i = 0; i < Hyper_Const::dim1; i++) {
+        printf("%d_", assigns[i]);
+    }
+    printf("\n"); 
+    return index_col > 0;
+}
 
 
 void Solver::printStats() const

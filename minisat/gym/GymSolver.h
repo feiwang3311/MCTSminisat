@@ -30,6 +30,7 @@ public:
 	void   set_decision(int decision);           // set the decision for the next step() call
 	void   step(float* array, int n);            // the step call (real step, not simulation)
 												 // one should call the set_decision() and step() to make a real step
+	void   step_forward(int decision);                   // this overload step function calls set_decision from within. No state can be returned from here.
 	
 	double getReward();                          // get the reward (most likely -1 for all intermediate steps)
 	bool   getDone();                            // get if the state is done                     

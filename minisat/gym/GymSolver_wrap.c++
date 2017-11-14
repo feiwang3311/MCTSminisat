@@ -5464,6 +5464,49 @@ fail:
 }
 
 
+SWIGINTERN PyObject *_wrap_GymSolver_step_forward(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Minisat::GymSolver *arg1 = (Minisat::GymSolver *) 0 ;
+  int arg2 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  int val2 ;
+  int ecode2 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"OO:GymSolver_step_forward",&obj0,&obj1)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Minisat__GymSolver, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "GymSolver_step_forward" "', argument " "1"" of type '" "Minisat::GymSolver *""'"); 
+  }
+  arg1 = reinterpret_cast< Minisat::GymSolver * >(argp1);
+  ecode2 = SWIG_AsVal_int(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "GymSolver_step_forward" "', argument " "2"" of type '" "int""'");
+  } 
+  arg2 = static_cast< int >(val2);
+  {
+    try
+    {
+      (arg1)->step_forward(arg2);
+    }
+    catch (const std::invalid_argument& e)
+    {
+      SWIG_exception(SWIG_ValueError, e.what());
+    }
+    catch (const std::out_of_range& e)
+    {
+      SWIG_exception(SWIG_IndexError, e.what());
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
 SWIGINTERN PyObject *_wrap_GymSolver_getReward(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Minisat::GymSolver *arg1 = (Minisat::GymSolver *) 0 ;
@@ -5636,6 +5679,7 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"GymSolver_get_visit_count", _wrap_GymSolver_get_visit_count, METH_VARARGS, NULL},
 	 { (char *)"GymSolver_set_decision", _wrap_GymSolver_set_decision, METH_VARARGS, NULL},
 	 { (char *)"GymSolver_step", _wrap_GymSolver_step, METH_VARARGS, NULL},
+	 { (char *)"GymSolver_step_forward", _wrap_GymSolver_step_forward, METH_VARARGS, NULL},
 	 { (char *)"GymSolver_getReward", _wrap_GymSolver_getReward, METH_VARARGS, NULL},
 	 { (char *)"GymSolver_getDone", _wrap_GymSolver_getDone, METH_VARARGS, NULL},
 	 { (char *)"GymSolver_getState", _wrap_GymSolver_getState, METH_VARARGS, NULL},

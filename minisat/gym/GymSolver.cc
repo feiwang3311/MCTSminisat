@@ -70,6 +70,11 @@ void GymSolver::step(float* array, int n) {
     */
 }
 
+void GymSolver::step_forward(int decision) {
+    set_decision(decision);
+    S.step();
+}
+
 double GymSolver::getReward() {
 	return S.env_reward;
 }

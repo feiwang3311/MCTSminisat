@@ -92,6 +92,10 @@ public:
     int     saveState(Clause& c, int used_space);            // Comments by Fei: sub-routine to a clause
     int     handle_writting_state(int temp, int used_space); // Comments by Fei: sub-routine to handle snprintf.
 
+    bool    generate_state(float* array);                    // Comments by Fei: directly write state to a float array 
+    int     write_clause(const Clause&, int, float*);        // Comments by Fei: sub-routine use by generate_state()  
+
+
 
     // Convenience versions of 'toDimacs()':
     void    toDimacs     (const char* file);
