@@ -243,7 +243,7 @@ class sat(object):
 			try:
 				self.file_index = self.sat_files.index(join(self.sat_dir, self.mode))
 			except ValueError:
-				assert False, "file {} in not in dir {}".format(mode, sat_dir)
+				assert False, "file" + mode + "in not in dir " + sat_dir
 		# this class is stateful, by these fields
 		self.repeat_counter = 0
 		self.iterate_counter = 0

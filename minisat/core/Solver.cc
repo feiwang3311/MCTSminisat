@@ -716,6 +716,7 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
 { 
     if (env_hold) {goto label2;}
 
+    check_exist(); // Comments by Fei: add this step to assign true to all vars that don't show up in any clauses
     assert(ok);
     // int         backtrack_level; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
     // int         conflictC = 0; // Comments by Fei: new declaration! both this and nof_conflicts have to be fields!
@@ -1369,6 +1370,20 @@ bool Solver::generate_state(float* array) {
     return index_col > 0;
 }
 
+// this function checks that, if some var never exist in all clauses, then assign true to it in assign vec 
+void Solver::check_exist() {
+    bool has_var[Hyper_Const::dim1];
+    for (int i = 0; i < Hyper_Const::dim1; i++)
+        has_var[i] = false;
+    for (int i = 0; i < clauses.size(); i++) {
+        const Clause& c = ca[clauses[i]];
+        for (int j = 0; j < c.size(); j++) 
+            has_var[var(c[j])] = true;
+    }
+    for (int i = 0; i < Hyper_Const::dim1; i++) 
+        if (!has_var[i]) 
+            assigns[i] = l_True;
+}
 
 void Solver::printStats() const
 {

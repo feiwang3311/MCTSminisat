@@ -94,7 +94,7 @@ public:
 
     bool    generate_state(float* array);                    // Comments by Fei: directly write state to a float array 
     int     write_clause(const Clause&, int, float*);        // Comments by Fei: sub-routine use by generate_state()  
-
+    void    check_exist();                                   // Comments by Fei: this function assigns true to vars that don't show up in any clauses
 
 
     // Convenience versions of 'toDimacs()':
