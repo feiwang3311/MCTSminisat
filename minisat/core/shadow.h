@@ -36,6 +36,7 @@ public:
     float uu[Hyper_Const::nact];         // this is an array of U values (combine pi and nn values)
     bool done[Hyper_Const::nact];        // this is an array to label if a child branch leads to finished state
     int sumN;                            // this is the total number of MCTS simulations run from this node (sum of nn)
+    bool valid[Hyper_Const::nact];       // this array marks all valid steps (for simulation) (constructed by generate_state() function)
     
     // MCTS functions
     shadow* next_root(int action); // this function set child at index "action" to be the next root, it returns the pointer to the new root
