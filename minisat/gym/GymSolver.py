@@ -283,6 +283,17 @@ class sat(object):
 		#self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
 		#return state, self.curr_state
 
+	def resetAt(self, file_no):
+		"""
+			this function reset the minisat by the file_no
+		"""
+		assert (file_no >= 0) and (file_no < self.sat_file_num), "file_no has to be a valid file list index"
+		pickfile = self.sat_files[file_no]
+		state = np.zeros((self.max_clause, self.max_var, 2), dtype = np.float32)
+		self.S = GymSolver(pickfile)
+		self.S.init(np.reshape(state, (self.max_clause * self.max_var * 2,)))
+		return state
+
 	def step(self, decision):
 		"""
 			this function makes a step based on the parameter input
