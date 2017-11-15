@@ -39,6 +39,7 @@ shadow::shadow(Solver* from) :
 			uu[i] = 0.0;
 			nn[i] = 0;
 			done[i] = false;
+            valid[i] = false;
 		}
 		sumN = 0;
         from -> seen.copyTo(seen); // Maybe optimized to use the same seen object instead of copying it..
@@ -76,6 +77,7 @@ shadow::shadow(shadow* from) :
 			uu[i] = 0.0;
 			nn[i] = 0;
 			done[i] = false;
+            valid[i] = false;
 		}
 		sumN = 0;
         from->seen.copyTo(seen);
@@ -116,10 +118,10 @@ shadow* shadow::next_root(int action) {
 shadow* shadow::next_to_explore(float* array) {
 	// pick a child to simulate by the score system
 	index_child_last_pick = 0; float pick_val = -1e20;
-	for (int i = 0; i < nact; i++) {
+	for (int i = 0; i < nact && valid[i]; i++) { // IMPORTANT: only check Lit that exists in current state
 		uu[i] = c_act * pi[i] * sqrt(sumN + 1) / (1 + nn[i]);
 		float val = nn[i] == 0? uu[i] : uu[i] + qu[i] / nn[i];
-		if (val > pick_val && value(toLit(i)) == l_Undef ) { // IMPORTANT: only pick Lit that is not yet assigned
+		if (val > pick_val) { 
 			index_child_last_pick = i; pick_val = val;
 		}
 	}
@@ -165,6 +167,8 @@ int shadow::write_clause(const Clause& c, int index_col, float* array) {
         	int index_row = var(c[i]); int index_z = int(sign(c[i]));
         	int index = index_z + index_row * dim2 + index_col * dim1 * dim2;
         	array[index] = 1.0;
+            // at the same time, we mark toInt(c[i]) as valid simulation options
+            valid[toInt(c[i])] = true;
         }
     }
     return index_col + 1;
