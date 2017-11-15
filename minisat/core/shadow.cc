@@ -41,6 +41,7 @@ shadow::shadow(Solver* from) :
 			done[i] = false;
             valid[i] = false;
 		}
+        valid_is_initialized = false;
 		sumN = 0;
         from -> seen.copyTo(seen); // Maybe optimized to use the same seen object instead of copying it..
 	}
@@ -79,6 +80,7 @@ shadow::shadow(shadow* from) :
 			done[i] = false;
             valid[i] = false;
 		}
+        valid_is_initialized = false;
 		sumN = 0;
         from->seen.copyTo(seen);
 	}
@@ -116,7 +118,9 @@ shadow* shadow::next_root(int action) {
 // return childern[index] (could be NULL if the child stepped to finished state) (otherwise, the returned pointer is to the leaf_shadow whose pi needs evaluation)
 // NOTE: index_child_last_pick is a field in this object, which tracks the most recent pick of childern IMPORTANT for assigning qu and pi later!!!
 shadow* shadow::next_to_explore(float* array) {
-	// pick a child to simulate by the score system
+	// pick a child to simulate by the score system (TODO: space for optimization)
+    if (!valid_is_initialized) generate_valid();
+
 	index_child_last_pick = 0; float pick_val = -1e20;
 	for (int i = 0; i < nact; i++) { 
 		uu[i] = c_act * pi[i] * sqrt(sumN + 1) / (1 + nn[i]);
@@ -125,7 +129,7 @@ shadow* shadow::next_to_explore(float* array) {
 			index_child_last_pick = i; pick_val = val;
 		}
 	}
-	assert (pick_val > (0.1 - 1e-20) && "failed to pick a good action for simulation");
+	assert (pick_val > (0.1 - 1e20) && "failed to pick a good action for simulation");
 
 	// found a child to simulate
     // printf("simulation steps on %d\n", index_child_last_pick);
@@ -199,8 +203,38 @@ bool shadow::generate_state(float* array) {
         printf("%d_", get_assigns(i));
     }
     printf("\n"); */
+    valid_is_initialized = true;
     return index_col > 0;
 }
+
+// over-loaded functions to just generate valid array
+bool shadow::generate_valid() {
+    int index_col = 0;
+    // write clauses in array (optimization:: get hold of the Solver's clause and work from there)
+    shadow* temp = this;
+    while (temp -> parent != NULL) {
+        temp = temp -> parent;
+    }
+    Solver* solver = temp -> origin;
+    vec<CRef>& clauses = solver -> clauses;
+    ClauseAllocator& ca = solver -> ca;
+    for (int i = 0; i < clauses.size() && index_col < dim0; i++) 
+        index_col = write_valid(ca[clauses[i]], index_col);
+    // write learnts in array
+    for (int i = 0; i < get_learnts_size() && index_col < dim0; i++)
+        index_col = write_valid(get_clause(get_learnts(i)), index_col);
+    valid_is_initialized = true;
+    return index_col > 0;
+}
+int shadow::write_valid(const Clause& c, int index_col) {
+    if (satisfied(c)) return index_col;
+    for (int i = 0; i < c.size(); i++) 
+        if (value(c[i]) != l_False) 
+            valid[toInt(c[i])] = true;
+    return index_col + 1;
+}
+
+
 
 // this function return true if state is not solved, false otherwise (note no parameters)
 bool shadow::generate_state() {

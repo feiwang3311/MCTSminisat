@@ -37,6 +37,7 @@ public:
     bool done[Hyper_Const::nact];        // this is an array to label if a child branch leads to finished state
     int sumN;                            // this is the total number of MCTS simulations run from this node (sum of nn)
     bool valid[Hyper_Const::nact];       // this array marks all valid steps (for simulation) (constructed by generate_state() function)
+    bool valid_is_initialized;
     
     // MCTS functions
     shadow* next_root(int action); // this function set child at index "action" to be the next root, it returns the pointer to the new root
@@ -47,6 +48,9 @@ public:
     bool generate_state();       // overload of generate_state function. No float pointer to write to, so only returns true if state is not done.
     int  write_clause (const Clause& c, int index_col, float* array); // helper function of "generate_state" for a clause
     bool satisfied    (const Clause& c) const;                        // helper function of "write_clause"
+    bool generate_valid();
+    int  write_valid(const Clause& c, int index_col);
+
 
 
     // Mode of operation: Directly copied from Solver class. Used during simulation 
