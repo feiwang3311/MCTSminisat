@@ -289,6 +289,7 @@ class sat(object):
 		"""
 		assert (file_no >= 0) and (file_no < self.sat_file_num), "file_no has to be a valid file list index"
 		pickfile = self.sat_files[file_no]
+		print("{} --> {}".format(file_no, pickfile))
 		state = np.zeros((self.max_clause, self.max_var, 2), dtype = np.float32)
 		self.S = GymSolver(pickfile)
 		self.S.init(np.reshape(state, (self.max_clause * self.max_var * 2,)))

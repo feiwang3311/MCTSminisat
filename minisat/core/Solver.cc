@@ -1360,7 +1360,7 @@ bool Solver::generate_state(float* array) {
     // write learnts in array
     for (int i = 0; i < learnts.size() && index_col < Hyper_Const::dim0; i++)
         index_col = write_clause(ca[learnts[i]], index_col, array);
-    printf("clause %d, learnts %d\n", clauses.size(), learnts.size());
+    /* printf("clause %d, learnts %d\n", clauses.size(), learnts.size());
     for (int i = 0; i < trail.size(); i++) {
         printf("%d_", trail[i].x);
     }
@@ -1368,7 +1368,7 @@ bool Solver::generate_state(float* array) {
     for (int i = 0; i < Hyper_Const::dim1; i++) {
         printf("%d_", assigns[i]);
     }
-    printf("\n"); 
+    printf("\n"); */ 
     return index_col > 0;
 }
 
