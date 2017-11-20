@@ -277,9 +277,10 @@ class sat(object):
 		state = np.zeros((self.max_clause, self.max_var, 2), dtype = np.float32)
 		print(pickfile)
 		self.S = GymSolver(pickfile)
-		self.S.init(np.reshape(state, (self.max_clause*self.max_var*2,)))
-		return state
-		
+		if self.S.init(np.reshape(state, (self.max_clause*self.max_var*2,)))
+			return state
+		else: return None
+
 		#self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
 		#return state, self.curr_state
 
@@ -292,8 +293,10 @@ class sat(object):
 		print("{} --> {}".format(file_no, pickfile))
 		state = np.zeros((self.max_clause, self.max_var, 2), dtype = np.float32)
 		self.S = GymSolver(pickfile)
-		self.S.init(np.reshape(state, (self.max_clause * self.max_var * 2,)))
-		return state
+		if self.S.init(np.reshape(state, (self.max_clause * self.max_var * 2,))):
+			return state
+		else: return None
+
 
 	def step(self, decision):
 		"""
