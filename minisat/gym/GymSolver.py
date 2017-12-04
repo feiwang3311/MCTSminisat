@@ -277,7 +277,7 @@ class sat(object):
 		state = np.zeros((self.max_clause, self.max_var, 2), dtype = np.float32)
 		print(pickfile)
 		self.S = GymSolver(pickfile)
-		if self.S.init(np.reshape(state, (self.max_clause*self.max_var*2,)))
+		if self.S.init(np.reshape(state, (self.max_clause*self.max_var*2,))):
 			return state
 		else: return None
 
