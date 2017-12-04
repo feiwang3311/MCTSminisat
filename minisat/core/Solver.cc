@@ -861,7 +861,7 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
                 */
 label2:
-                printf("@");
+                printf("@"); fflush(stdout); // Will now print everything in the stdout buffer
                 /* Comments by Fei: since the user (RL algorithm) is now picking the literals, there is a small chance that the algorithm
                 makes a mistake and step on an invalid literal (a literal that already assigned false).
                 As an extra level of protection, we prevent invalid steps from being carried on here!! */
