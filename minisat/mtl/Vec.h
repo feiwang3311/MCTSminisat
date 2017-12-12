@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <assert.h>
 #include <limits>
 #include <new>
+#include <stdio.h>
 
 #include "minisat/mtl/IntTypes.h"
 #include "minisat/mtl/XAlloc.h"
@@ -85,8 +86,8 @@ public:
     T&       last  (void)              { return data[sz-1]; }
 
     // Vector interface:
-    const T& operator [] (Size index) const { return data[index]; }
-    T&       operator [] (Size index)       { return data[index]; }
+    const T& operator [] (Size index) const {assert (index < sz && "vec overflow1"); return data[index]; }
+    T&       operator [] (Size index)       {assert (index < sz && "vec overflow2"); return data[index]; }
 
     // Duplicatation (preferred instead):
     void copyTo(vec<T>& copy) const { copy.clear(); copy.growTo(sz); for (Size i = 0; i < sz; i++) copy[i] = data[i]; }

@@ -199,9 +199,9 @@ python-wrap: $(BUILD_DIR)/dynamic/lib/$(MINISAT_DLIB).$(SOMAJOR).$(SOMINOR)$(SOR
 	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.c++ -o minisat/gym/GymSolver_wrap.o -I. -I/usr/include/python3.5m
 	g++ -shared -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/dynamic/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so
 
-python-debug: $(BUILD_DIR)/debug/lib/$(MINISAT_SLIB) $(SRCS)
+python-debug: $(BUILD_DIR)/debug/lib/$(MINISAT_SLIB) $(SRCS) 
 	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.c++ -o minisat/gym/GymSolver_wrap.o -I. -I/usr/include/python3.5m
-	g++ -shared -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/debug/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so
+	g++ -shared -fPIC -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/debug/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so
 
 clean:
 	rm -f $(foreach t, release debug profile dynamic, $(foreach o, $(SRCS:.cc=.o), $(BUILD_DIR)/$t/$o)) \

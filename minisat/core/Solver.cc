@@ -781,16 +781,19 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 cancelUntil(0);
                 return l_Undef; 
             } */
-
+            
             // Simplify the set of problem clauses:
-            if (decisionLevel() == 0 && !simplify()) { 
+            if (decisionLevel() == 0 && learnts.size() == 0 && !simplify()) { 
                 return l_False;
             }
-            
+
+            /* debug: try without reduceDB
             if (learnts.size()-nAssigns() >= max_learnts) {
                 // Reduce the set of learnt clauses:
+        		printf("\n\n\nREDUCEDB%d %d %f\n\n\n", learnts.size(), nAssigns(), max_learnts); fflush(stdout);
                 reduceDB();
-            } 
+            } */
+
             field_of_next = lit_Undef; // Comments by Fei: change to field variable
             
             while (decisionLevel() < assumptions.size()){
@@ -840,10 +843,16 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                     root_shadow = root_shadow -> next_root(toInt(agent_decision)); 
                     // need to deal with "temp" (a tree of useless shadow objects, needs to reclaim the memory recursively)
                     reclaim_memory(temp);
-                    // check if the state is solved by checking if root shadow is NULL
-                    if (!root_shadow) return l_True;
-                    bool flag = generate_state(write_state_to); 
+        		    // check that the root shadow reflect the same state as Solver!! IMPORTANT FOR EDBUGGING
+        		    if (!root_shadow) {
+        		    	assert (!generate_state(write_state_to) && "root_shadow is null but Solver is not solved!");
+        		      	return l_True;
+            		}
+        		    assert (root_shadow->check_state() && "root_shadow and Solver have different state!");
+        		    bool flag = generate_state(write_state_to);
+        		    assert (flag && "root_shadow is not NULL but Solver state is empty!");
                 } 
+                
                 env_hold = true;
                 env_reward = -1.0;
                 return l_Undef;
@@ -886,18 +895,17 @@ label2:
                 if (field_of_next == lit_Undef) // Comments by Fei: change to field variable
                     // Model found:
                     return l_True;
-
-                // add some sanity checks here, if the shadow system is already initiated
-                if (root_shadow != NULL) {
+	
+        		if (root_shadow != NULL) {
+        		    int key = toInt(agent_decision);
                     // check that the agent_decision is a valid option from the root_shadow
-                    assert (root_shadow -> valid[agent_decision] && "agent_decision is not a valid action");
+                    assert (root_shadow -> valid[key] && "agent_decision is not a valid action");
                     // check that the number of visits for the agent_decision option is larger than 0
-                    assert (root_shadow -> nn[agent_decision] > 0 && "agent_decision is never visited in simulation");
+                    assert (root_shadow -> nn[key] > 0 && "agent_decision is never visited in simulation");
                     // check that either child on agent_decision exist or marked done
-                    assert ((root_shadow -> done[agent_decision] || root_shadow -> childern[agent_decision]) && "agent_decision is neither done nor exists");
+                    assert ((root_shadow -> done[key] || root_shadow -> childern[key]) && "agent_decision is neither done nor exists");
                 }
             }
-
             // Increase decision level and enqueue 'next'
             newDecisionLevel();
             uncheckedEnqueue(field_of_next); // Comments by Fei: change to field variable
