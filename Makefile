@@ -90,7 +90,7 @@ lsh:	$(BUILD_DIR)/dynamic/lib/$(MINISAT_DLIB).$(SOMAJOR).$(SOMINOR)$(SORELEASE)
 
 ## Build-type Compile-flags:
 $(BUILD_DIR)/release/%.o:			MINISAT_CXXFLAGS +=$(MINISAT_REL) $(MINISAT_RELSYM)
-$(BUILD_DIR)/debug/%.o:				MINISAT_CXXFLAGS +=$(MINISAT_DEB) -g
+$(BUILD_DIR)/debug/%.o:				MINISAT_CXXFLAGS +=$(MINISAT_DEB) -g $(MINISAT_FPIC)
 $(BUILD_DIR)/profile/%.o:			MINISAT_CXXFLAGS +=$(MINISAT_PRF) -pg
 $(BUILD_DIR)/dynamic/%.o:			MINISAT_CXXFLAGS +=$(MINISAT_REL) $(MINISAT_FPIC)
 
@@ -198,6 +198,10 @@ install-bin: $(BUILD_DIR)/dynamic/bin/$(MINISAT)
 python-wrap: $(BUILD_DIR)/dynamic/lib/$(MINISAT_DLIB).$(SOMAJOR).$(SOMINOR)$(SORELEASE) $(SRCS)
 	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.c++ -o minisat/gym/GymSolver_wrap.o -I. -I/usr/include/python3.5m
 	g++ -shared -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/dynamic/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so
+
+python-debug: $(BUILD_DIR)/debug/lib/$(MINISAT_SLIB) $(SRCS) 
+	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.c++ -o minisat/gym/GymSolver_wrap.o -I. -I/usr/include/python3.5m
+	g++ -shared -fPIC -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/debug/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so
 
 clean:
 	rm -f $(foreach t, release debug profile dynamic, $(foreach o, $(SRCS:.cc=.o), $(BUILD_DIR)/$t/$o)) \

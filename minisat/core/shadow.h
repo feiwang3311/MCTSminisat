@@ -45,7 +45,7 @@ public:
     shadow* next_to_explore(float* state); // this function initiate simulation from this shadow, will write state to state argument, returns leaf shadow 
 
     bool generate_state(float*); // this function askes this node to write its state to the argument given by RL algorithm (no memory copy, inplace write)
-    bool generate_state();       // overload of generate_state function. No float pointer to write to, so only returns true if state is not done.
+    bool generate_state();       // this function returns true if state is not solved
     int  write_clause (const Clause& c, int index_col, float* array); // helper function of "generate_state" for a clause
     bool satisfied    (const Clause& c) const;                        // helper function of "write_clause"
     bool generate_valid();
@@ -118,7 +118,8 @@ public:
     char get_dirty(Lit p) const;
     void set_dirty(Lit p, char c);
     void clean_watches(Lit p);                            // remove deleted clause (mark is true) from watcher list 
-
+    bool assert_clean(vec<Solver::Watcher>& ws);          // this function returns true if all watches are clean
+ 
     ClauseAllocator ca_shadow;                            // if clauses are changed, they are copied to ca_shadow, then changed from here
     std::unordered_map<CRef, CRef> cref_map;              // copied clauses often have new CRef. Use this as a mapping from old CRef to new CRef
     int ca_size;                                          // this tracks the size of ca of the parent (used as CRef when adding learnt clauses)
@@ -142,7 +143,11 @@ public:
     void     analyze          (CRef confl, vec<Lit>& learnt, int& bt);  // (bt = backtrack)
     void     cancelUntil      (int level);                              // Backtrack until a certain level.
     void     reduceDB         ();                                       // Reduce the set of learnt clauses.
-   
+    bool     check_state      ();                                       // DEBUG! assume this shadow is the root_shadow, and check its state is consistent with the Solver 
+    void     check_self       () const; 
+ // DEBUG! check that this shadow object is self-coherant
+
+ 
     // other helper functions
     int      get_level        (Var x)   const;
     CRef     get_reason       (Var x)   const;
@@ -267,19 +272,52 @@ inline void shadow::set_polarity(Var x, char y) {
 inline vec<Solver::Watcher>& shadow::get_watches_copied(Lit p_input) {
     int p = p_input.x;
     if (!watches_map.count(p)) {
-        watches_map[p] = new vec<Solver::Watcher>();
-        shadow* temp = this -> parent; 
+        const shadow* temp = this; 
         while(temp->watches_map.count(p) == 0 && temp-> parent != NULL) temp = temp -> parent;
+        watches_map[p] = new vec<Solver::Watcher>();
         if (temp -> parent == NULL) {
-            temp->origin->watches.lookup(p_input).copyVstructTo(*watches_map.at(p)); // Comments by Fei: this is cleaned!
-            dirty_map[p] = 0;
+        	temp->origin->watches.lookup(p_input).copyVstructTo(*watches_map.at(p)); 
+    		if (get_dirty(p_input) == assert_clean(*watches_map.at(p)))
+			{printf("%d?%d", get_dirty(p_input), assert_clean(*watches_map.at(p))); fflush(stdout);}	
+		assert (get_dirty(p_input) != assert_clean(*watches_map.at(p)) && "get_dirty needs update 1!");
         } else {
-            temp->watches_map.at(p)->copyVstructTo(*watches_map.at(p)); // Comments by Fei: this may not be clean!!
-            dirty_map[p] = temp->dirty_map.at(p);
+        	temp->watches_map.at(p)->copyVstructTo(*watches_map.at(p)); 
+	    		if (get_dirty(p_input) == assert_clean(*watches_map.at(p)))
+			{printf("%d?%d", get_dirty(p_input), assert_clean(*watches_map.at(p))); fflush(stdout);
+		// for debug, print something
+		printf("source get_dirty is %d\n", temp -> get_dirty(p_input));
+		vec<Solver::Watcher>& v1 = *(temp -> watches_map.at(p));
+		vec<Solver::Watcher>& v2 = *watches_map.at(p);
+		printf("source watches have size %d\n", v1.size());
+		CRef prob = v1[0].cref;
+		const shadow* ee = temp;
+		while (ee->cref_map.count(prob) == 0 && ee->parent != NULL) ee = ee->parent;
+		if (ee -> parent == NULL) printf("get from solver\n");
+		else printf("get from shadow\n");
+		for (int i = 0 ; i < v1.size(); i++) {
+			printf("%d@%d ", v1[i].cref, temp -> get_clause(v1[i].cref).mark() );
+		} 
+		printf("here watches have size %d\n", v2.size());
+		for (int i = 0; i < v2.size(); i++) {
+			printf("%d@%d ", v2[i].cref, get_clause(v2[i].cref).mark() );
+		}
+		fflush(stdout);
+		temp -> check_self();
+			}	
+		assert (get_dirty(p_input) != assert_clean(*watches_map.at(p)) && "get_dirty needs update 2!");
         }
+	// assert that get_dirty is correct
     }
     return *watches_map.at(p);
 }
+
+inline bool shadow::assert_clean(vec<Solver::Watcher>& ws) {
+	for (int i = 0; i < ws.size(); i++)
+		if (get_clause(ws[i].cref).mark())
+			return false;
+	return true;
+}
+
 inline char shadow::get_dirty(Lit p_input) const {
     int p = p_input.x;
     const shadow* temp = this;
@@ -323,8 +361,11 @@ inline CRef shadow::get_alloc(const vec<Lit>& ps, bool learnt) {
 inline CRef shadow::get_learnts(int x) const {
     const shadow* temp = this;
     while (temp -> learnts_copy_is_uninitialized && temp -> learnts_map.count(x) == 0 && temp -> parent != NULL) temp = temp -> parent;
-    if (temp -> parent == NULL) return temp->origin->learnts[x];
-    if (!temp -> learnts_copy_is_uninitialized) return temp->learnts_copy[x];
+    if (temp -> parent == NULL) { return temp->origin->learnts[x]; }
+    if (!temp -> learnts_copy_is_uninitialized) {
+	assert(x < temp -> learnts_copy.size() && "learnts_copy overflow");
+        return temp->learnts_copy[x];
+    }
     return temp-> learnts_map.at(x);
 }
 inline void shadow::append_learnts(CRef y) {
@@ -332,7 +373,9 @@ inline void shadow::append_learnts(CRef y) {
     learnts_map[learnts_size++] = y;
 }
 inline int shadow::get_learnts_size() const {
-    if (parent == NULL) return origin -> learnts.size();
+    if (parent == NULL) {
+	return origin -> learnts.size();
+    }
     return learnts_copy_is_uninitialized ? learnts_size : learnts_copy.size();
 }
 inline void shadow::get_copy_for_learnts() {

@@ -773,16 +773,18 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 cancelUntil(0);
                 return l_Undef; 
             } */
-
+            
             // Simplify the set of problem clauses:
-            if (decisionLevel() == 0 && !simplify()) { 
+            if (decisionLevel() == 0 && learnts.size() == 0 && !simplify()) { 
                 return l_False;
             }
-
-            if (learnts.size()-nAssigns() >= max_learnts)
+/* debug: try without reduceDB
+            if (learnts.size()-nAssigns() >= max_learnts) {
                 // Reduce the set of learnt clauses:
+		printf("\n\n\nREDUCEDB%d %d %f\n\n\n", learnts.size(), nAssigns(), max_learnts); fflush(stdout);
                 reduceDB();
-
+	    }
+*/
             field_of_next = lit_Undef; // Comments by Fei: change to field variable
             
             while (decisionLevel() < assumptions.size()){
@@ -833,9 +835,14 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                     root_shadow = root_shadow -> next_root(toInt(agent_decision)); 
                     // need to deal with "temp" (a tree of useless shadow objects, needs to reclaim the memory recursively)
                     reclaim_memory(temp);
-                    // check if the state is solved by checking if root shadow is NULL
-                    if (!root_shadow) return l_True;
-                    bool flag = generate_state(write_state_to); 
+		    // check that the root shadow reflect the same state as Solver!! IMPORTANT FOR EDBUGGING
+		    if (!root_shadow) {
+		    	assert (!generate_state(write_state_to) && "root_shadow is null but Solver is not solved!");
+			return l_True;
+    		    }
+		    assert (root_shadow->check_state() && "root_shadow and Solver have different state!");
+		    bool flag = generate_state(write_state_to);
+		    assert (flag && "root_shadow is not NULL but Solver state is empty!");
                 } 
                 env_hold = true;
                 env_reward = -1.0;
@@ -861,7 +868,6 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
                 */
 label2:
-                printf("@"); fflush(stdout); // Will now print everything in the stdout buffer
                 /* Comments by Fei: since the user (RL algorithm) is now picking the literals, there is a small chance that the algorithm
                 makes a mistake and step on an invalid literal (a literal that already assigned false).
                 As an extra level of protection, we prevent invalid steps from being carried on here!! */
@@ -880,6 +886,16 @@ label2:
                 if (field_of_next == lit_Undef) // Comments by Fei: change to field variable
                     // Model found:
                     return l_True;
+		
+		if (root_shadow != NULL) {
+		    int key = toInt(agent_decision);
+                    // check that the agent_decision is a valid option from the root_shadow
+                    assert (root_shadow -> valid[key] && "agent_decision is not a valid action");
+                    // check that the number of visits for the agent_decision option is larger than 0
+                    assert (root_shadow -> nn[key] > 0 && "agent_decision is never visited in simulation");
+                    // check that either child on agent_decision exist or marked done
+                    assert ((root_shadow -> done[key] || root_shadow -> childern[key]) && "agent_decision is neither done nor exists");
+                }
             }
 
             // Increase decision level and enqueue 'next'
@@ -899,7 +915,11 @@ label2:
 // argument pi_input and v are the evaluated values for the last state returned. They should be passed on to the leaf_shadow if leaf_shadow is not NULL
 int Solver::simulate(float* array, float* pi_input, float v) {
     // simulate is responsible to set up shadow trees if there is none at the entry of this function
-    if (root_shadow == NULL) root_shadow = leaf_shadow = new shadow(this);
+    if (root_shadow == NULL) {
+        root_shadow = leaf_shadow = new shadow(this);
+        // call generate state from root_shadow to initialize the valid array (for MCTS)
+        root_shadow -> generate_valid();
+    }
 
     // printf("reached the Solver::simulate function\n");
     if (leaf_shadow != NULL) {

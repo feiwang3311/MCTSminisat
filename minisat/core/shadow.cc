@@ -8,7 +8,7 @@
 using namespace Minisat;
 
 shadow::shadow(Solver* from) : 
-	verbosity                     (from -> verbosity),
+    verbosity                     (from -> verbosity),
     ccmin_mode                    (from -> ccmin_mode),
     phase_saving                  (from -> phase_saving),
     learntsize_factor             (from -> learntsize_factor),
@@ -22,32 +22,32 @@ shadow::shadow(Solver* from) :
     cla_inc                       (from -> cla_inc),
     clause_decay                  (from -> clause_decay),
     trail_size                    (from -> trail.size()),
-    trail_lim_size				  (from -> trail_lim.size()),
+    trail_lim_size		  (from -> trail_lim.size()),
     qhead                         (from -> qhead),
-    ca_size						  (from -> ca.size()),
-    learnts_size 				  (from -> learnts.size())
-	{ 
-		ca_shadow.extra_clause_field = from -> ca.extra_clause_field; 
-		learnts_copy_is_uninitialized = true;
-		origin = from;
-		parent = NULL;
-		index_child_last_pick = -1;
-		for (int i = 0; i < nact; i++) {
-			childern[i] = NULL;
-			pi[i] = 0.0;
-			qu[i] = 0.0;
-			uu[i] = 0.0;
-			nn[i] = 0;
-			done[i] = false;
-            valid[i] = false;
-		}
-        valid_is_initialized = false;
-		sumN = 0;
-        from -> seen.copyTo(seen); // Maybe optimized to use the same seen object instead of copying it..
+    ca_size			  (from -> ca.size()),
+    learnts_size		  (from -> learnts.size())
+    { 
+	ca_shadow.extra_clause_field = from -> ca.extra_clause_field; 
+	learnts_copy_is_uninitialized = true;
+	origin = from;
+	parent = NULL;
+	index_child_last_pick = -1;
+	for (int i = 0; i < nact; i++) {
+		childern[i] = NULL;
+		pi[i] = 0.0;
+		qu[i] = 0.0;
+		uu[i] = 0.0;
+		nn[i] = 0;
+		done[i] = false;
+	        valid[i] = false;
 	}
+        valid_is_initialized = false;
+	sumN = 0;
+        from -> seen.copyTo(seen); // Maybe optimized to use the same seen object instead of copying it..
+    }
 
 shadow::shadow(shadow* from) :
-	verbosity                     (from -> verbosity),
+    verbosity                     (from -> verbosity),
     ccmin_mode                    (from -> ccmin_mode),
     phase_saving                  (from -> phase_saving),
     learntsize_factor             (from -> learntsize_factor),
@@ -61,10 +61,10 @@ shadow::shadow(shadow* from) :
     cla_inc                       (from -> cla_inc),
     clause_decay                  (from -> clause_decay),
     trail_size                    (from -> trail_size),
-    trail_lim_size				  (from -> trail_lim_size),
+    trail_lim_size		  (from -> trail_lim_size),
     qhead                         (from -> qhead),
-    ca_size						  (from -> ca_size),
-    learnts_size 				  (from -> learnts_size)
+    ca_size			  (from -> ca_size),
+    learnts_size 		  (from -> get_learnts_size())
 	{
 		ca_shadow.extra_clause_field = from -> ca_shadow.extra_clause_field; 
 		learnts_copy_is_uninitialized = true;
@@ -78,18 +78,18 @@ shadow::shadow(shadow* from) :
 			uu[i] = 0.0;
 			nn[i] = 0;
 			done[i] = false;
-            valid[i] = false;
+     		        valid[i] = false;
 		}
-        valid_is_initialized = false;
+		valid_is_initialized = false;
 		sumN = 0;
-        from->seen.copyTo(seen);
+	        from->seen.copyTo(seen);
 	}
 
 shadow::~shadow() {
 	// destruct the data in std::unordered_map<int, vec<Solver::Watcher>* > watches_map;
 	for (std::pair<int, vec<Solver::Watcher>* > element : watches_map) {
 		element.second -> ~vec();
-    }
+   	 }
 }
 
 // This function set the child at index action to be the new root of MCTS
@@ -107,7 +107,7 @@ shadow* shadow::next_root(int action) {
 
 // This function push forward the search within the MCTS forward
 // The key logic is picking the best childern index, which is calculated based on nn, pi, qu and sumN
-// The logic also prevent picking variables whose values are already assigned.
+// The logic also prevent picking variables whose values are already assigned OR who is not in the state (check valid array)
 // it will throw exception if no good choice can be make (check the assert command)
 // if a child index is pick, update the nn and sumN, but the qu (values) has to wait until next simulation call from Solver (need neural net evaluation)
 // if the child to pick is marked done, it means that the child was visited before, and it stepped into finished state. Return NULL
@@ -119,20 +119,21 @@ shadow* shadow::next_root(int action) {
 // NOTE: index_child_last_pick is a field in this object, which tracks the most recent pick of childern IMPORTANT for assigning qu and pi later!!!
 shadow* shadow::next_to_explore(float* array) {
 	// pick a child to simulate by the score system (TODO: space for optimization)
-    if (!valid_is_initialized) generate_valid();
+	assert (valid_is_initialized && "time to explore but the valid [] is still not initialized");
 
-	index_child_last_pick = 0; float pick_val = -1e20;
+	index_child_last_pick = -1; float pick_val;
 	for (int i = 0; i < nact; i++) { 
+		if (!valid[i]) continue; // IMPORTANT: only check Lit that exists in current state 
 		uu[i] = c_act * pi[i] * sqrt(sumN + 1) / (1 + nn[i]);
 		float val = nn[i] == 0? uu[i] : uu[i] + qu[i] / nn[i];
-		if (val > pick_val && valid[i]) { // IMPORTANT: only check Lit that exists in current state 
+		if (index_child_last_pick == -1 || val > pick_val) {		
 			index_child_last_pick = i; pick_val = val;
 		}
 	}
-	assert (pick_val > (0.1 - 1e20) && "failed to pick a good action for simulation");
+	assert (index_child_last_pick >= 0 && "failed to pick a good action for simulation");
 
 	// found a child to simulate
-    // printf("simulation steps on %d\n", index_child_last_pick);
+//	printf("(%d)", index_child_last_pick); fflush(stdout);
 	nn[index_child_last_pick] += 1; sumN++;
 	if (done[index_child_last_pick]) { // the picked child is already visited before and the child is in a done state
 		return NULL;
@@ -141,7 +142,7 @@ shadow* shadow::next_to_explore(float* array) {
 		return childern[index_child_last_pick] -> next_to_explore(array);
 	} else {
 		childern[index_child_last_pick] = new shadow(this);
-        done[index_child_last_pick] = !(childern[index_child_last_pick] -> step(toLit(index_child_last_pick), array));
+	        done[index_child_last_pick] = !(childern[index_child_last_pick] -> step(toLit(index_child_last_pick), array));
 		if (done[index_child_last_pick]) {
 			childern[index_child_last_pick] -> ~shadow();
 			childern[index_child_last_pick] = NULL;
@@ -166,17 +167,131 @@ bool shadow::satisfied(const Clause& c) const {
 // helper function for generate_state (write state to a 1D array and returns the next col to write to)
 int shadow::write_clause(const Clause& c, int index_col, float* array) {
 	if (satisfied(c)) return index_col;
-    for (int i = 0; i < c.size(); i++) {
-        if (value(c[i]) != l_False) {
-        	int index_row = var(c[i]); int index_z = int(sign(c[i]));
-        	int index = index_z + index_row * dim2 + index_col * dim1 * dim2;
-        	array[index] = 1.0;
-            // at the same time, we mark toInt(c[i]) as valid simulation options
+	for (int i = 0; i < c.size(); i++) {
+        	if (value(c[i]) != l_False) {
+        		int index_row = var(c[i]); int index_z = int(sign(c[i]));
+	        	int index = index_z + index_row * dim2 + index_col * dim1 * dim2;
+        		array[index] = 1.0;
+	            // at the same time, we mark toInt(c[i]) as valid simulation options
+        	    valid[toInt(c[i])] = true;
+       		 }
+	}
+	return index_col + 1;
+}
+
+int shadow::write_valid(const Clause& c, int index_col) {
+    if (satisfied(c)) return index_col;
+    for (int i = 0; i < c.size(); i++) 
+        if (value(c[i]) != l_False) 
             valid[toInt(c[i])] = true;
-        }
-    }
     return index_col + 1;
 }
+
+// this function assumes that this shadow is the root_shadow used in MCT in Solver
+// this function checks that this shadow's state is consistent with that of the Solver
+bool shadow::check_state() {
+    assert (parent == NULL && "parent should be NULL for root_shadow");
+    assert (origin != NULL && "origin should not be NULL for root_shadow");
+    // now assert about the states
+    // trail:
+    assert (trail_size == origin -> trail.size() && "INCONSISTANCY: trail size are different");
+    for (auto it : trail_map) 
+        assert(it.second == origin -> trail[it.first] && "INCONSISTANCY: trail i is different");
+    // trail_lim:
+    assert (trail_lim_size == origin -> trail_lim.size() && "INCONSISTANCY: trail lim size are different");
+    for (auto it : trail_lim_map)
+        assert(it.second == origin -> trail_lim[it.first] && "INCONSISTANCY: trail_lim i is different");
+    // qhead:
+    assert (qhead == origin -> qhead && "INCONSISTANCY: qhead is different");
+    // assigns:
+    for (auto it : assigns_map)
+        assert(it.second == origin -> assigns[it.first] && "INCONSISTANCY: assigns i is different");
+    // vardata:
+    for (auto it : vardata_map) {
+        assert(it.second.reason == (origin -> vardata[it.first]).reason && "INCONSISTANCY: vardata i reason is different");
+        assert(it.second.level == (origin -> vardata[it.first]).level && "INCONSISTANCY: vardata i level is different");
+    }
+    // polarity map:
+    for (auto it : polarity_map)
+        assert(it.second == origin -> polarity[it.first] && "INCONSISTANCY: polarity i is different");
+    // learnts:
+    if (learnts_copy_is_uninitialized) {
+        assert (learnts_size == origin -> learnts.size() && "INCONSISTANCY: learnts size are different 1");
+        for (auto it : learnts_map)
+            assert(it.second == origin -> learnts[it.first] && "INCONSISTANCY: learnts i are different 1");
+    } else {
+        assert (learnts_copy.size() == origin -> learnts.size() && "INCONSISTANCY: learnts size are different 2");
+        for (int i = 0; i < learnts_copy.size(); i++)
+            assert(learnts_copy[i] == origin -> learnts[i] && "INCONSISTANCY: learnts i are different 2");
+    }
+    // ca_size
+    assert (ca_size == origin -> ca.size() && "INCONSISTANCY: ca size are different");
+    // ca_shadow
+    for (auto it : cref_map) {
+        Clause& c1 = origin -> ca[it.first];
+        Clause& c2 = ca_shadow[it.second];
+        assert (c1.size() == c2.size() && "INCONSISTANCY: clauses have different sizes");
+        assert (c1.learnt() == c2.learnt() && "INCONSISTANCY: clauses are not labeled as learnt in the same way");
+        assert (c1.has_extra() == c2.has_extra() && "INCONSISTANCY: clauses has_extra are different");
+        assert (c1.mark() == c2.mark() && "INCONSISTANCY: clauses mark are different");
+        for (int i = 0 ; i < c1.size(); i++) {
+		if (c1[i] != c2[i]) {
+			printf("||%d %d %d %d %d||", it.first, it.second, c1.size(), c1.learnt(), c1.mark());
+			for (int j = 0; j < c1.size(); j++) 
+				printf("(%d,%d)", toInt(c1[j]), toInt(c2[j]));
+			fflush(stdout);
+		}
+		assert (c1[i] == c2[i] && "INCONSISTANCY: clauses content i are different");
+	}
+    }
+    // watches_map (check for those that we copied watches vector, the dirty values of the keys are the same)
+    for (auto it : watches_map) {
+	Lit 		      key     = toLit(it.first);
+	if (get_dirty(key) != origin -> watches.is_dirty(key)) {
+		printf("DD %d&%d", get_dirty(key), origin -> watches.is_dirty(key));
+	}
+	fflush(stdout);
+	assert (get_dirty(key) == origin -> watches.is_dirty(key) && "INCONSISTANCY: dirtyness are different");   	
+    }
+    // maybe more assert for watches_map??
+
+    check_self();
+    return true; 
+}  
+
+void shadow::check_self() const {
+	// watches map (check for watches map is only to make sure that the key is either the first or the second lit in clauses)
+    for (auto it : watches_map) {
+        vec<Solver::Watcher>& watches = *it.second;
+        Lit                   key     = toLit(it.first);
+        for (int i = 0; i < watches.size(); i++) {
+            Solver::Watcher watcher = watches[i];
+            CRef cr = watcher.cref;
+            const Clause& c = get_clause(cr);
+	    if (c[0] != ~key && c[1] != ~key) {
+	    	printf("{{%d}[%d,%d]}", ~key, c[0], c[1]); fflush(stdout);
+    	    }	  
+            assert (c[0] == ~key || c[1] == ~key);
+        }
+    }
+	// watches map (check if a key is not dirty, all cref in the vector should not be deleted)
+	for (auto it : watches_map) {
+		vec<Solver::Watcher>& watches = *it.second;
+		Lit 		      key     = toLit(it.first);
+		if (!get_dirty(key)) {
+    			for (int i = 0; i < watches.size(); i++) {
+if (get_clause(watches[i].cref).mark()) {
+	CRef target = watches[i].cref;
+	if (cref_map.count(target) == 0) printf("shadow does not have a copy of this clause\n");
+	else printf("shadow has a copy of this clause\n");
+}
+			assert (!(get_clause(watches[i].cref).mark()) && "clean key has marked clauses!");
+			}
+		}
+	} 
+}
+
+
 // write state in tensor "array" as side effect (if too many clauses to write, cut off by dim0)
 // return true if state is not empty (not solved), false otherwise
 bool shadow::generate_state(float* array) {
@@ -184,16 +299,16 @@ bool shadow::generate_state(float* array) {
 	// write clauses in array (optimization:: get hold of the Solver's clause and work from there)
 	shadow* temp = this;
 	while (temp -> parent != NULL) {
-        temp = temp -> parent;
-    }
+		temp = temp -> parent;
+   	}
 	Solver* solver = temp -> origin;
 	vec<CRef>& clauses = solver -> clauses;
 	ClauseAllocator& ca = solver -> ca;
 	for (int i = 0; i < clauses.size() && index_col < dim0; i++) 
-        index_col = write_clause(ca[clauses[i]], index_col, array);
-    // write learnts in array
-    for (int i = 0; i < get_learnts_size() && index_col < dim0; i++)
-    	index_col = write_clause(get_clause(get_learnts(i)), index_col, array);
+	        index_col = write_clause(ca[clauses[i]], index_col, array);
+   	// write learnts in array
+	for (int i = 0; i < get_learnts_size() && index_col < dim0; i++)
+    		index_col = write_clause(get_clause(get_learnts(i)), index_col, array);
     /* printf("clause %d, learnts %d\n", clauses.size(), get_learnts_size());
     for (int i = 0; i < trail_size; i++) {
         printf("%d_", get_trail(i).x);
@@ -204,6 +319,9 @@ bool shadow::generate_state(float* array) {
     }
     printf("\n"); */
     valid_is_initialized = true;
+
+	// add more assert to check for the correctness of the state of simulation
+	check_self();
     return index_col > 0;
 }
 
@@ -226,15 +344,6 @@ bool shadow::generate_valid() {
     valid_is_initialized = true;
     return index_col > 0;
 }
-int shadow::write_valid(const Clause& c, int index_col) {
-    if (satisfied(c)) return index_col;
-    for (int i = 0; i < c.size(); i++) 
-        if (value(c[i]) != l_False) 
-            valid[toInt(c[i])] = true;
-    return index_col + 1;
-}
-
-
 
 // this function return true if state is not solved, false otherwise (note no parameters)
 bool shadow::generate_state() {
@@ -280,21 +389,26 @@ CRef shadow::propagate()
                 *j++ = *i++; continue; 
             }
 
-            // Make sure the false literal is data[1]:
-            CRef cr       = i->cref; 
-            Lit false_lit = ~p;
-            Lit first;
-            const Clause& c = get_clause(cr);
-            if (c[0] == false_lit) {
+	    // Make sure the false literal is data[1]:
+            Lit  false_lit = ~p;
+            CRef cr        = i -> cref; 
+            const Clause& ccc = get_clause(cr);
+            if (ccc[0] == false_lit) {
             	Clause& cc = get_clause_copied(cr);
-            	first = cc[0] = cc[1]; cc[1] = false_lit;
-            } else { 
-  				assert(c[1] == false_lit);
-  				first = c[0];
-  			}
+            	cc[0] = cc[1]; cc[1] = false_lit;
+            } 
+  	    const Clause& c = get_clause(cr); // re-initialize the value c, because there may already be a copy and change
+	    if (c[1] != false_lit) {
+		printf("%s/%s ", c.learnt()? "L":"O", c.mark()? "M":"Z");
+		for (int i = 0; i < c.size(); i++)
+			printf("%d ", toInt(c[i]));
+		printf("^%d\n", toInt(false_lit)); fflush(stdout);
+	    }
+            assert(c[1] == false_lit);
             i++; 
 
             // If 0th watch is true, then clause is already satisfied.
+            Lit         first = c[0];
             Solver::Watcher w = Solver::Watcher(cr, first);
             if (first != blocker && value(first) == l_True){
                 *j++ = w; continue; 
@@ -317,8 +431,9 @@ CRef shadow::propagate()
                 // Copy the remaining watches:
                 while (i < end)
                     *j++ = *i++;
-            } else
+            } else {
                 uncheckedEnqueue(first, cr);
+	    }
 
         NextClause:;
         }
@@ -327,9 +442,9 @@ CRef shadow::propagate()
     return confl;
 }
 
-struct reduceDB_lt {
+struct reduceDB_ltl {
 	shadow* which_shadow;
-	reduceDB_lt(shadow* this_shadow): which_shadow(this_shadow) {}
+	reduceDB_ltl(shadow* this_shadow): which_shadow(this_shadow) {}
 	bool operator() (CRef x, CRef y) {
 		const Clause& a = which_shadow->get_clause(x);
 		const Clause& b = which_shadow->get_clause(y);
@@ -343,7 +458,7 @@ void shadow::reduceDB()
 	
 	// need a copy of learnts!
 	get_copy_for_learnts();
-	sort(learnts_copy, reduceDB_lt(this));
+	sort(learnts_copy, reduceDB_ltl(this));
 
     // Don't delete binary or locked clauses. From the rest, delete clauses from the first half
     // and clauses with activity smaller than 'extra_lim':
@@ -566,6 +681,7 @@ bool shadow::step(Lit action, float* array)
         CRef confl = propagate(); // Comments by Fei: changed to field variable in Solver, USE local variable in shadow
         if (confl != CRef_Undef) {
             // CONFLICT
+//            printf("C"); fflush(stdout);
             // conflicts++; conflictCounts++; // Comments by Fei: replace usage! conflictC++; 
             if (decisionLevel() == 0) return false; // terminate with UNSAT, return false because nothing written in the array argument for evaluation 
 
@@ -596,11 +712,16 @@ bool shadow::step(Lit action, float* array)
 
         } else {
             // NO CONFLICT (disabled restart) (disable simplify() when decisionLevel == 0)
-            if (get_learnts_size() - nAssigns() >= max_learnts)
+//            printf("O"); fflush(stdout);
+/* debug: try without reduceDB
+            if (get_learnts_size() - nAssigns() >= max_learnts){
+		printf("\n\n\nSHADOW REDUCEDB%d %d %f\n\n\n", get_learnts_size(), nAssigns(), max_learnts); fflush(stdout);
                 reduceDB();
-
+	    }
+*/
             // remove code about assumptions. 
-			// save states and return true is state is not finished, false otherwise
+            // save states and return true if state is not finished, false otherwise
+//            printf("G"); fflush(stdout);
             return generate_state(array); 
         }
     }

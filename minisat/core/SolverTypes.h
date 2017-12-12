@@ -341,6 +341,7 @@ class OccLists
     Vec&  operator[](const K& idx){ return occs[idx]; }
     Vec&  lookup    (const K& idx){ if (dirty[idx]) clean(idx); return occs[idx]; }
 
+    bool  is_dirty  (const K& idx) {return dirty[idx];}
     void  cleanAll  ();
     void  clean     (const K& idx);
     void  smudge    (const K& idx){
