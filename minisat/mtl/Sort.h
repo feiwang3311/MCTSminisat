@@ -21,6 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Minisat_Sort_h
 #define Minisat_Sort_h
 
+#include <stdio.h>
 #include "minisat/mtl/Vec.h"
 
 //=================================================================================================
@@ -40,7 +41,6 @@ void selectionSort(T* array, int size, LessThan lt)
 {
     int     i, j, best_i;
     T       tmp;
-
     for (i = 0; i < size-1; i++){
         best_i = i;
         for (j = i+1; j < size; j++){
@@ -53,6 +53,17 @@ void selectionSort(T* array, int size, LessThan lt)
 template <class T> static inline void selectionSort(T* array, int size) {
     selectionSort(array, size, LessThan_default<T>()); }
 
+template <class LessThan>
+void dump( LessThan* lt) {
+    for (int i = 0 ; i < sizeof( LessThan); i++) {
+        printf("%02x", ((char *) lt)[i] & 0xFF);
+        if (i % 4 == 3) printf(" ");
+        if (i % 16 == 15) printf("\n");
+    }
+    printf("\n");
+}
+
+
 template <class T, class LessThan>
 void sort(T* array, int size, LessThan lt)
 {
@@ -64,7 +75,6 @@ void sort(T* array, int size, LessThan lt)
         T           tmp;
         int         i = -1;
         int         j = size;
-
         for(;;){
             do i++; while(lt(array[i], pivot));
             do j--; while(lt(pivot, array[j]));
@@ -73,7 +83,6 @@ void sort(T* array, int size, LessThan lt)
 
             tmp = array[i]; array[i] = array[j]; array[j] = tmp;
         }
-
         sort(array    , i     , lt);
         sort(&array[i], size-i, lt);
     }

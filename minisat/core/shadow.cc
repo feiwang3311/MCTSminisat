@@ -64,7 +64,7 @@ shadow::shadow(shadow* from) :
     trail_lim_size				  (from -> trail_lim_size),
     qhead                         (from -> qhead),
     ca_size						  (from -> ca_size),
-    learnts_size 				  (from -> learnts_size)
+    learnts_size 				  (from -> get_learnts_size())
 	{
 		ca_shadow.extra_clause_field = from -> ca_shadow.extra_clause_field; 
 		learnts_copy_is_uninitialized = true;
@@ -107,7 +107,7 @@ shadow* shadow::next_root(int action) {
 
 // This function push forward the search within the MCTS forward
 // The key logic is picking the best childern index, which is calculated based on nn, pi, qu and sumN
-// The logic also prevent picking variables whose values are already assigned.
+// The logic also prevent picking variables whose values are already assigned OR who is not in the state (check valid array)
 // it will throw exception if no good choice can be make (check the assert command)
 // if a child index is pick, update the nn and sumN, but the qu (values) has to wait until next simulation call from Solver (need neural net evaluation)
 // if the child to pick is marked done, it means that the child was visited before, and it stepped into finished state. Return NULL
@@ -119,7 +119,7 @@ shadow* shadow::next_root(int action) {
 // NOTE: index_child_last_pick is a field in this object, which tracks the most recent pick of childern IMPORTANT for assigning qu and pi later!!!
 shadow* shadow::next_to_explore(float* array) {
 	// pick a child to simulate by the score system (TODO: space for optimization)
-    if (!valid_is_initialized) generate_valid();
+    assert (valid_is_initialized && "time to explore but the valid [] is still not initialized");
 
 	index_child_last_pick = 0; float pick_val = -1e20;
 	for (int i = 0; i < nact; i++) { 
@@ -132,7 +132,6 @@ shadow* shadow::next_to_explore(float* array) {
 	assert (pick_val > (0.1 - 1e20) && "failed to pick a good action for simulation");
 
 	// found a child to simulate
-    // printf("simulation steps on %d\n", index_child_last_pick);
 	nn[index_child_last_pick] += 1; sumN++;
 	if (done[index_child_last_pick]) { // the picked child is already visited before and the child is in a done state
 		return NULL;
@@ -177,6 +176,68 @@ int shadow::write_clause(const Clause& c, int index_col, float* array) {
     }
     return index_col + 1;
 }
+
+int shadow::write_valid(const Clause& c, int index_col) {
+    if (satisfied(c)) return index_col;
+    for (int i = 0; i < c.size(); i++) 
+        if (value(c[i]) != l_False) 
+            valid[toInt(c[i])] = true;
+    return index_col + 1;
+}
+
+// this function assumes that this shadow is the root_shadow used in MCT in Solver
+// this function checks that this shadow's state is consistent with that of the Solver
+bool shadow::check_state() {
+    assert (parent == NULL && "parent should be NULL for root_shadow");
+    assert (origin != NULL && "origin should not be NULL for root_shadow");
+    // now assert about the states
+    // trail:
+    assert (trail_size == origin -> trail.size() && "INCONSISTANCY: trail size are different");
+    for (auto it : trail_map) 
+        assert(it.second == origin -> trail[it.first] && "INCONSISTANCY: trail i is different");
+    // trail_lim:
+    assert (trail_lim_size == origin -> trail_lim.size() && "INCONSISTANCY: trail lim size are different");
+    for (auto it : trail_lim_map)
+        assert(it.second == origin -> trail_lim[it.first] && "INCONSISTANCY: trail_lim i is different");
+    // qhead:
+    assert (qhead == origin -> qhead && "INCONSISTANCY: qhead is different");
+    // assigns:
+    for (auto it : assigns_map)
+        assert(it.second == origin -> assigns[it.first] && "INCONSISTANCY: assigns i is different");
+    // vardata:
+    for (auto it : vardata_map)
+        assert(it.second == origin -> vardata[it.first] && "INCONSISTANCY: vardata i is different");
+    // polarity map:
+    for (auto it : polarity_map)
+        assert(it.second == origin -> polarity[it.first] && "INCONSISTANCY: polarity i is different");
+    // learnts:
+    if (learnts_copy_is_uninitialized) {
+        assert (learnts_size == origin -> learnts.size() && "INCONSISTANCY: learnts size are different 1");
+        for (auto it : learnts_map)
+            assert(it.second == origin -> learnts[it.first] && "INCONSISTANCY: learnts i are different 1");
+    } else {
+        assert (learnts_copy.size() == origin -> learnts.size() && "INCONSISTANCY: learnts size are different 2");
+        for (int i = 0; i < learnts_copy.size(); i++)
+            assert(learnts_copy[i] == origin -> learnts[i] && "INCONSISTANCY: learnts i are different 2");
+    }
+    // ca_size
+    assert (ca_size == origin -> ca.size() && "INCONSISTANCY: ca size are different");
+    // ca_shadow
+    for (auto it : cref_map) {
+        Clause& c1 = origin -> ca[it.first];
+        Clause& c2 = ca_shadow[it.second];
+        assert (c1.size() == c2.size() && "INCONSISTANCY: clauses have different sizes");
+        assert (c1.learnt() == c2.learnt() && "INCONSISTANCY: clauses are not labeled as learnt in the same way");
+        assert (c1.has_extra() == c2.has_extra() && "INCONSISTANCY: clauses has_extra are different");
+        assert (c1.mark() == c2.mark() && "INCONSISTANCY: clauses mark are different");
+        for (int i = 0 ; i < c1.size(); i++)
+            assert (c1[i] == c2[i] && "INCONSISTANCY: clauses content i are different");
+    }
+    // watches map (TODO)
+    
+    return true; 
+} 
+
 // write state in tensor "array" as side effect (if too many clauses to write, cut off by dim0)
 // return true if state is not empty (not solved), false otherwise
 bool shadow::generate_state(float* array) {
@@ -204,6 +265,20 @@ bool shadow::generate_state(float* array) {
     }
     printf("\n"); */
     valid_is_initialized = true;
+
+    // add more assert to check the correctness of the state 
+    // watches map (check for watches map is only to make sure that the key is either the first or the second lit in clauses)
+    for (auto it : watches_map) {
+        vec<Solver::Watcher>& watches = *it.second;
+        Lit                   key     = toLit(it.first);
+        for (int i = 0; i < watches.size(); i++) {
+            Solver::Watcher watcher = watches[i];
+            CRef cr = watcher.cref;
+            const Clause& c = get_clause(cr);
+            assert (c[0] == ~key || c[1] == ~key);
+        }
+    }
+
     return index_col > 0;
 }
 
@@ -226,14 +301,6 @@ bool shadow::generate_valid() {
     valid_is_initialized = true;
     return index_col > 0;
 }
-int shadow::write_valid(const Clause& c, int index_col) {
-    if (satisfied(c)) return index_col;
-    for (int i = 0; i < c.size(); i++) 
-        if (value(c[i]) != l_False) 
-            valid[toInt(c[i])] = true;
-    return index_col + 1;
-}
-
 
 
 // this function return true if state is not solved, false otherwise (note no parameters)
@@ -252,6 +319,51 @@ bool shadow::generate_state() {
 	return false;
 }
 
+bool shadow::simplify() TODO
+{
+    assert(decisionLevel() == 0);
+
+    if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
+        return true;
+
+    // Remove satisfied clauses:
+    removeSatisfied(learnts);
+    if (remove_satisfied){       // Can be turned off.
+        removeSatisfied(clauses);
+
+        // TODO: what todo in if 'remove_satisfied' is false?
+
+        // Remove all released variables from the trail:
+        for (int i = 0; i < released_vars.size(); i++){
+            assert(seen[released_vars[i]] == 0);
+            seen[released_vars[i]] = 1;
+        }
+
+        int i, j;
+        for (i = j = 0; i < trail.size(); i++)
+            if (seen[var(trail[i])] == 0)
+                trail[j++] = trail[i];
+        trail.shrink(i - j);
+        //printf("trail.size()= %d, qhead = %d\n", trail.size(), qhead);
+        qhead = trail.size();
+
+        for (int i = 0; i < released_vars.size(); i++)
+            seen[released_vars[i]] = 0;
+
+        // Released variables are now ready to be reused:
+        append(released_vars, free_vars);
+        released_vars.clear();
+    }
+    checkGarbage();
+    rebuildOrderHeap();
+
+    simpDB_assigns = nAssigns();
+    simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
+
+    return true;
+}
+
+
 // enque p as the next assignment. The qhead didn't increment, so the propagate() knows that this Lit p needs to be propagated.
 void shadow::uncheckedEnqueue(Lit p, CRef from)
 {
@@ -265,6 +377,7 @@ void shadow::uncheckedEnqueue(Lit p, CRef from)
 CRef shadow::propagate()
 {
     CRef    confl     = CRef_Undef;
+
     while (qhead < trail_size){
         Lit                   p  = get_trail(qhead++); // 'p' is enqueued fact to propagate.
         vec<Solver::Watcher>& ws = get_watches_copied(p);
@@ -281,20 +394,19 @@ CRef shadow::propagate()
             }
 
             // Make sure the false literal is data[1]:
-            CRef cr       = i->cref; 
-            Lit false_lit = ~p;
-            Lit first;
-            const Clause& c = get_clause(cr);
-            if (c[0] == false_lit) {
+            Lit  false_lit = ~p;
+            CRef cr        = i -> cref; 
+            const Clause& ccc = get_clause(cr);
+            if (ccc[0] == false_lit) {
             	Clause& cc = get_clause_copied(cr);
-            	first = cc[0] = cc[1]; cc[1] = false_lit;
-            } else { 
-  				assert(c[1] == false_lit);
-  				first = c[0];
-  			}
+            	cc[0] = cc[1]; cc[1] = false_lit;
+            } 
+  			const Clause& c = get_clause(cr); // re-initialize the value c, because there may already be a copy and change
+            assert(c[1] == false_lit);
             i++; 
 
             // If 0th watch is true, then clause is already satisfied.
+            Lit         first = c[0];
             Solver::Watcher w = Solver::Watcher(cr, first);
             if (first != blocker && value(first) == l_True){
                 *j++ = w; continue; 
@@ -327,9 +439,9 @@ CRef shadow::propagate()
     return confl;
 }
 
-struct reduceDB_lt {
+struct reduceDB_ltl {
 	shadow* which_shadow;
-	reduceDB_lt(shadow* this_shadow): which_shadow(this_shadow) {}
+	reduceDB_ltl(shadow* this_shadow): which_shadow(this_shadow) {}
 	bool operator() (CRef x, CRef y) {
 		const Clause& a = which_shadow->get_clause(x);
 		const Clause& b = which_shadow->get_clause(y);
@@ -343,7 +455,7 @@ void shadow::reduceDB()
 	
 	// need a copy of learnts!
 	get_copy_for_learnts();
-	sort(learnts_copy, reduceDB_lt(this));
+	sort(learnts_copy, reduceDB_ltl(this));
 
     // Don't delete binary or locked clauses. From the rest, delete clauses from the first half
     // and clauses with activity smaller than 'extra_lim':

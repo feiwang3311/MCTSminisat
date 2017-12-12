@@ -52,7 +52,6 @@ public:
     int  write_valid(const Clause& c, int index_col);
 
 
-
     // Mode of operation: Directly copied from Solver class. Used during simulation 
     int       verbosity;          
     int       ccmin_mode;         // Controls conflict clause minimization (0=none, 1=basic, 2=deep).
@@ -142,6 +141,8 @@ public:
     void     analyze          (CRef confl, vec<Lit>& learnt, int& bt);  // (bt = backtrack)
     void     cancelUntil      (int level);                              // Backtrack until a certain level.
     void     reduceDB         ();                                       // Reduce the set of learnt clauses.
+    bool     check_state      ();                                       // DEBUG! assume this shadow is the root_shadow, and check its state is consistent with the Solver!
+    bool     simplify();
    
     // other helper functions
     int      get_level        (Var x)   const;
@@ -267,9 +268,9 @@ inline void shadow::set_polarity(Var x, char y) {
 inline vec<Solver::Watcher>& shadow::get_watches_copied(Lit p_input) {
     int p = p_input.x;
     if (!watches_map.count(p)) {
-        watches_map[p] = new vec<Solver::Watcher>();
-        shadow* temp = this -> parent; 
+        shadow* temp = this; 
         while(temp->watches_map.count(p) == 0 && temp-> parent != NULL) temp = temp -> parent;
+        watches_map[p] = new vec<Solver::Watcher>();
         if (temp -> parent == NULL) {
             temp->origin->watches.lookup(p_input).copyVstructTo(*watches_map.at(p)); // Comments by Fei: this is cleaned!
             dirty_map[p] = 0;

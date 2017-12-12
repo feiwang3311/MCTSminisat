@@ -534,9 +534,9 @@ CRef Solver::propagate()
                 *j++ = *i++; continue; }
 
             // Make sure the false literal is data[1]:
+            Lit      false_lit = ~p;
             CRef     cr        = i->cref;
             Clause&  c         = ca[cr];
-            Lit      false_lit = ~p;
             if (c[0] == false_lit)
                 c[0] = c[1], c[1] = false_lit;
             assert(c[1] == false_lit);
@@ -576,7 +576,15 @@ CRef Solver::propagate()
     return confl;
 }
 
-
+/*
+void dump(struct reduceDB_lt* lt) {
+    for (int i = 0 ; i < sizeof(struct reduceDB_lt); i++) {
+        printf("%02x", ((char *) lt)[i] & 0xFF);
+        if (i % 4 == 3) printf(" ");
+        if (i % 16 == 15) printf("\n");
+    }
+    printf("\n");
+};*/
 /*_________________________________________________________________________________________________
 |
 |  reduceDB : ()  ->  [void]
@@ -587,10 +595,13 @@ CRef Solver::propagate()
 |________________________________________________________________________________________________@*/
 struct reduceDB_lt { 
     ClauseAllocator& ca;
-    reduceDB_lt(ClauseAllocator& ca_) : ca(ca_) {}
+    reduceDB_lt(ClauseAllocator& ca_) : ca(ca_) {printf("construct!\n"); }
     bool operator () (CRef x, CRef y) { 
         return ca[x].size() > 2 && (ca[y].size() == 2 || ca[x].activity() < ca[y].activity()); } 
 };
+
+
+
 void Solver::reduceDB()
 {
     int     i, j;
@@ -716,9 +727,6 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
 { 
     if (env_hold) {goto label2;}
 
-    // check_exist(); // Comments by Fei: add this step to assign true to all vars that don't show up in any clauses
-    // No longer necessary when valid[] is introduced in shadow class
-
     assert(ok);
     // int         backtrack_level; // Comments by Fei: new declaration! Only used locally, should be moved within for loop, right before usage!
     // int         conflictC = 0; // Comments by Fei: new declaration! both this and nof_conflicts have to be fields!
@@ -778,11 +786,11 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
             if (decisionLevel() == 0 && !simplify()) { 
                 return l_False;
             }
-
-            if (learnts.size()-nAssigns() >= max_learnts)
+            
+            if (learnts.size()-nAssigns() >= max_learnts) {
                 // Reduce the set of learnt clauses:
                 reduceDB();
-
+            } 
             field_of_next = lit_Undef; // Comments by Fei: change to field variable
             
             while (decisionLevel() < assumptions.size()){
@@ -799,7 +807,6 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                     break;
                 }
             } 
-
             if (field_of_next == lit_Undef) { // Comments by Fei: change to field variable
                 // New variable decision:
                 decisions++;
@@ -861,7 +868,6 @@ lbool Solver::search(int nof_conflicts) // Comments by Fei: make nof_conflicts a
                 return l_Undef; // Comments by Fei: the value returned is dummy, when env_hold is true!
                 */
 label2:
-                printf("@"); fflush(stdout); // Will now print everything in the stdout buffer
                 /* Comments by Fei: since the user (RL algorithm) is now picking the literals, there is a small chance that the algorithm
                 makes a mistake and step on an invalid literal (a literal that already assigned false).
                 As an extra level of protection, we prevent invalid steps from being carried on here!! */
@@ -880,6 +886,16 @@ label2:
                 if (field_of_next == lit_Undef) // Comments by Fei: change to field variable
                     // Model found:
                     return l_True;
+
+                // add some sanity checks here, if the shadow system is already initiated
+                if (root_shadow != NULL) {
+                    // check that the agent_decision is a valid option from the root_shadow
+                    assert (root_shadow -> valid[agent_decision] && "agent_decision is not a valid action");
+                    // check that the number of visits for the agent_decision option is larger than 0
+                    assert (root_shadow -> nn[agent_decision] > 0 && "agent_decision is never visited in simulation");
+                    // check that either child on agent_decision exist or marked done
+                    assert ((root_shadow -> done[agent_decision] || root_shadow -> childern[agent_decision]) && "agent_decision is neither done nor exists");
+                }
             }
 
             // Increase decision level and enqueue 'next'
@@ -899,9 +915,13 @@ label2:
 // argument pi_input and v are the evaluated values for the last state returned. They should be passed on to the leaf_shadow if leaf_shadow is not NULL
 int Solver::simulate(float* array, float* pi_input, float v) {
     // simulate is responsible to set up shadow trees if there is none at the entry of this function
-    if (root_shadow == NULL) root_shadow = leaf_shadow = new shadow(this);
+    if (root_shadow == NULL) {
+        root_shadow = leaf_shadow = new shadow(this);
+        // call generate state from root_shadow to initialize the valid array (for MCTS)
+        root_shadow -> generate_valid();
+    }
 
-    // printf("reached the Solver::simulate function\n");
+    // if leaf_shadow is not NULL, write the pi and v values to leaf_shadow!
     if (leaf_shadow != NULL) {
         // pass the pi to the right leaf node
         for (int i = 0; i < Hyper_Const::nact; i++) {
@@ -917,12 +937,15 @@ int Solver::simulate(float* array, float* pi_input, float v) {
         }
     }
 
+    // if total number of simulations is reached, return 0 (no more evaluation or simulation to be done)
     if (root_shadow -> sumN >= Hyper_Const::MCTS_size_lim) {
         leaf_shadow = NULL;
-        return 0; // no need to eval array (state), no need to simulate more
+        return 0; 
     }
 
-    // do a simulation step (call next_to_explore) from the root_shadow (if return is NULL, MCTS stepped into a finished state)
+    // otherwise, do a simulation step (call next_to_explore) from the root_shadow.
+    // if return is NULL, MCTS stepped into a finished state,
+    // else, the state of the new node will be written in "array".
     leaf_shadow = root_shadow -> next_to_explore(array);
     while (leaf_shadow == NULL) {
         /* Comments by Fei: change of mind >>>> finished state should return 0.0 (average, or no-information value)
@@ -943,6 +966,7 @@ void Solver::reclaim_memory(shadow* root) {
     }
     root -> ~shadow();
 }
+
 
 // this function passes array to the root_shadow, who then write the nn array (visit count) to array
 void Solver::get_visit_count(float* array) {
