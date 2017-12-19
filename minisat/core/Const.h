@@ -19,6 +19,7 @@ public :
     static const gsl_rng *r;              // random generater
     static const double alpha[nact];      // alpha parameter
     static void generate_dirichlet(double*);     // function used to generate dirichlet noise
+//    static const int MCTS_size_lim; // the size of MCT we want to achieve.
 };
 
 #endif

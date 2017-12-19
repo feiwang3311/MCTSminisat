@@ -11,3 +11,5 @@ const double Hyper_Const::alpha[Hyper_Const::nact] = {2.0,2.0,2.0,2.0,2.0,2.0,2.
 void Hyper_Const::generate_dirichlet(double* di) {
     gsl_ran_dirichlet(Hyper_Const::r, Hyper_Const::nact, Hyper_Const::alpha, di);
 } 
+//const float Hyper_Const::c_act = 6.095f;      // need a better value here for exploration
+//const int Hyper_Const::MCTS_size_lim = 487; // the size of MCT we want to achieve.
