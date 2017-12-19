@@ -15,8 +15,8 @@ namespace Minisat {
 class Solver; 
 class shadow {
 public:
-    shadow( shadow* from); 
-    shadow( Solver* from); 
+    shadow(shadow* from); 
+    shadow(Solver* from); 
     virtual ~shadow();
 
     const int nact = Hyper_Const::nact;
@@ -38,6 +38,7 @@ public:
     int sumN;                            // this is the total number of MCTS simulations run from this node (sum of nn)
     bool valid[Hyper_Const::nact];       // this array marks all valid steps (for simulation) (constructed by generate_state() function)
     bool valid_is_initialized;
+    bool dirichlet_noise_has_been_added; // 
     
     // MCTS functions
     shadow* next_root(int action); // this function set child at index "action" to be the next root, it returns the pointer to the new root

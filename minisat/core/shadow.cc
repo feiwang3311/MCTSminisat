@@ -27,23 +27,24 @@ shadow::shadow(Solver* from) :
     ca_size			  (from -> ca.size()),
     learnts_size		  (from -> learnts.size())
     { 
-	ca_shadow.extra_clause_field = from -> ca.extra_clause_field; 
-	learnts_copy_is_uninitialized = true;
-	origin = from;
-	parent = NULL;
-	index_child_last_pick = -1;
-	for (int i = 0; i < nact; i++) {
-		childern[i] = NULL;
-		pi[i] = 0.0;
-		qu[i] = 0.0;
-		uu[i] = 0.0;
-		nn[i] = 0;
-		done[i] = false;
-	        valid[i] = false;
-	}
-        valid_is_initialized = false;
-	sumN = 0;
-        from -> seen.copyTo(seen); // Maybe optimized to use the same seen object instead of copying it..
+    	ca_shadow.extra_clause_field = from -> ca.extra_clause_field; 
+    	learnts_copy_is_uninitialized = true;
+    	origin = from;
+    	parent = NULL;
+    	index_child_last_pick = -1;
+    	for (int i = 0; i < nact; i++) {
+    		childern[i] = NULL;
+    		pi[i] = 0.0;
+    		qu[i] = 0.0;
+    		uu[i] = 0.0;
+    		nn[i] = 0;
+    		done[i] = false;
+    	    valid[i] = false;
+    	}
+            valid_is_initialized = false;
+            dirichlet_noise_has_been_added = false;
+    	    sumN = 0;
+            from -> seen.copyTo(seen); // Maybe optimized to use the same seen object instead of copying it..
     }
 
 shadow::shadow(shadow* from) :
@@ -81,8 +82,9 @@ shadow::shadow(shadow* from) :
      		        valid[i] = false;
 		}
 		valid_is_initialized = false;
+        dirichlet_noise_has_been_added = false;
 		sumN = 0;
-	        from->seen.copyTo(seen);
+	    from->seen.copyTo(seen);
 	}
 
 shadow::~shadow() {
@@ -105,10 +107,10 @@ shadow* shadow::next_root(int action) {
     return temp;
 }
 
-// This function push forward the search within the MCTS forward
+// This function push forward the search within the MCTS
 // The key logic is picking the best childern index, which is calculated based on nn, pi, qu and sumN
-// The logic also prevent picking variables whose values are already assigned OR who is not in the state (check valid array)
-// it will throw exception if no good choice can be make (check the assert command)
+// The logic also prevent picking variables whose values are already assigned OR who is not in the state (check "valid" array)
+// it will throw exception if no valid choice can be make (check the "assert" command)
 // if a child index is pick, update the nn and sumN, but the qu (values) has to wait until next simulation call from Solver (need neural net evaluation)
 // if the child to pick is marked done, it means that the child was visited before, and it stepped into finished state. Return NULL
 // if the child to pick is not NULL, make recursive call from that child
@@ -120,6 +122,17 @@ shadow* shadow::next_root(int action) {
 shadow* shadow::next_to_explore(float* array) {
 	// pick a child to simulate by the score system (TODO: space for optimization)
 	assert (valid_is_initialized && "time to explore but the valid [] is still not initialized");
+
+    // if this is the root node, and the dirichlet noise has not been added to the pi, add dirichlet noise
+    if (parent == NULL && !dirichlet_noise_has_been_added) {
+        double di[Hyper_Const::nact];
+        Hyper_Const::generate_dirichlet(di);
+        for (int i = 0; i < Hyper_Const::nact; i++) {
+            pi[i] += (float) di[i];
+        }
+        dirichlet_noise_has_been_added = true;
+
+    }
 
 	index_child_last_pick = -1; float pick_val;
 	for (int i = 0; i < nact; i++) { 
@@ -359,51 +372,6 @@ bool shadow::generate_state() {
 	}
 	return false;
 }
-
-bool shadow::simplify() TODO
-{
-    assert(decisionLevel() == 0);
-
-    if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
-        return true;
-
-    // Remove satisfied clauses:
-    removeSatisfied(learnts);
-    if (remove_satisfied){       // Can be turned off.
-        removeSatisfied(clauses);
-
-        // TODO: what todo in if 'remove_satisfied' is false?
-
-        // Remove all released variables from the trail:
-        for (int i = 0; i < released_vars.size(); i++){
-            assert(seen[released_vars[i]] == 0);
-            seen[released_vars[i]] = 1;
-        }
-
-        int i, j;
-        for (i = j = 0; i < trail.size(); i++)
-            if (seen[var(trail[i])] == 0)
-                trail[j++] = trail[i];
-        trail.shrink(i - j);
-        //printf("trail.size()= %d, qhead = %d\n", trail.size(), qhead);
-        qhead = trail.size();
-
-        for (int i = 0; i < released_vars.size(); i++)
-            seen[released_vars[i]] = 0;
-
-        // Released variables are now ready to be reused:
-        append(released_vars, free_vars);
-        released_vars.clear();
-    }
-    checkGarbage();
-    rebuildOrderHeap();
-
-    simpDB_assigns = nAssigns();
-    simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
-
-    return true;
-}
-
 
 // enque p as the next assignment. The qhead didn't increment, so the propagate() knows that this Lit p needs to be propagated.
 void shadow::uncheckedEnqueue(Lit p, CRef from)
