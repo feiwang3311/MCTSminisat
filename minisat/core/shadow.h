@@ -144,8 +144,7 @@ public:
     void     cancelUntil      (int level);                              // Backtrack until a certain level.
     void     reduceDB         ();                                       // Reduce the set of learnt clauses.
     bool     check_state      ();                                       // DEBUG! assume this shadow is the root_shadow, and check its state is consistent with the Solver 
-    void     check_self       () const; 
- // DEBUG! check that this shadow object is self-coherant
+    void     check_self       () const;                                 // DEBUG! check that this shadow object is self-coherant
 
  
     // other helper functions
@@ -277,34 +276,35 @@ inline vec<Solver::Watcher>& shadow::get_watches_copied(Lit p_input) {
         watches_map[p] = new vec<Solver::Watcher>();
         if (temp -> parent == NULL) {
         	temp->origin->watches.lookup(p_input).copyVstructTo(*watches_map.at(p)); 
-    		if (get_dirty(p_input) == assert_clean(*watches_map.at(p)))
-			{printf("%d?%d", get_dirty(p_input), assert_clean(*watches_map.at(p))); fflush(stdout);}	
-		assert (get_dirty(p_input) != assert_clean(*watches_map.at(p)) && "get_dirty needs update 1!");
+    		if (get_dirty(p_input) == assert_clean(*watches_map.at(p))) { // for debug, print something
+                printf("%d?%d", get_dirty(p_input), assert_clean(*watches_map.at(p))); fflush(stdout);
+            }	
+            assert (get_dirty(p_input) != assert_clean(*watches_map.at(p)) && "get_dirty needs update 1!");
         } else {
         	temp->watches_map.at(p)->copyVstructTo(*watches_map.at(p)); 
-	    		if (get_dirty(p_input) == assert_clean(*watches_map.at(p)))
-			{printf("%d?%d", get_dirty(p_input), assert_clean(*watches_map.at(p))); fflush(stdout);
-		// for debug, print something
-		printf("source get_dirty is %d\n", temp -> get_dirty(p_input));
-		vec<Solver::Watcher>& v1 = *(temp -> watches_map.at(p));
-		vec<Solver::Watcher>& v2 = *watches_map.at(p);
-		printf("source watches have size %d\n", v1.size());
-		CRef prob = v1[0].cref;
-		const shadow* ee = temp;
-		while (ee->cref_map.count(prob) == 0 && ee->parent != NULL) ee = ee->parent;
-		if (ee -> parent == NULL) printf("get from solver\n");
-		else printf("get from shadow\n");
-		for (int i = 0 ; i < v1.size(); i++) {
-			printf("%d@%d ", v1[i].cref, temp -> get_clause(v1[i].cref).mark() );
-		} 
-		printf("here watches have size %d\n", v2.size());
-		for (int i = 0; i < v2.size(); i++) {
-			printf("%d@%d ", v2[i].cref, get_clause(v2[i].cref).mark() );
-		}
-		fflush(stdout);
-		temp -> check_self();
+	    	if (get_dirty(p_input) == assert_clean(*watches_map.at(p))) { // for debug, print something
+                printf("%d?%d", get_dirty(p_input), assert_clean(*watches_map.at(p))); 
+                fflush(stdout);
+        		printf("source get_dirty is %d\n", temp -> get_dirty(p_input));
+        		vec<Solver::Watcher>& v1 = *(temp -> watches_map.at(p));
+        		vec<Solver::Watcher>& v2 = *watches_map.at(p);
+        		printf("source watches have size %d\n", v1.size());
+        		CRef prob = v1[0].cref;
+        		const shadow* ee = temp;
+        		while (ee->cref_map.count(prob) == 0 && ee->parent != NULL) ee = ee->parent;
+        		if (ee -> parent == NULL) printf("get from solver\n");
+        		else printf("get from shadow\n");
+        		for (int i = 0 ; i < v1.size(); i++) {
+        			printf("%d@%d ", v1[i].cref, temp -> get_clause(v1[i].cref).mark() );
+        		} 
+        		printf("here watches have size %d\n", v2.size());
+        		for (int i = 0; i < v2.size(); i++) {
+        			printf("%d@%d ", v2[i].cref, get_clause(v2[i].cref).mark() );
+        		}
+        		fflush(stdout);
+        		temp -> check_self();
 			}	
-		assert (get_dirty(p_input) != assert_clean(*watches_map.at(p)) && "get_dirty needs update 2!");
+		    assert (get_dirty(p_input) != assert_clean(*watches_map.at(p)) && "get_dirty needs update 2!");
         }
 	// assert that get_dirty is correct
     }

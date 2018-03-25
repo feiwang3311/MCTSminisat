@@ -128,16 +128,17 @@ shadow* shadow::next_to_explore(float* array) {
         double di[Hyper_Const::nact];
         Hyper_Const::generate_dirichlet(di);
         for (int i = 0; i < Hyper_Const::nact; i++) {
-            pi[i] += (float) di[i];
+            pi[i] = pi[i] * 0.75f + ((float)di[i]) * 0.25f;
+            //printf("%f ", (float)di[i]);
         }
+        //fflush(stdout); assert(false);
         dirichlet_noise_has_been_added = true;
-
     }
 
 	index_child_last_pick = -1; float pick_val;
 	for (int i = 0; i < nact; i++) { 
 		if (!valid[i]) continue; // IMPORTANT: only check Lit that exists in current state 
-		uu[i] = c_act * pi[i] * sqrt(sumN + 1) / (1 + nn[i]);
+		uu[i] = c_act * pi[i] * sqrt(sumN) / (1 + nn[i]);
 		float val = nn[i] == 0? uu[i] : uu[i] + qu[i] / nn[i];
 		if (index_child_last_pick == -1 || val > pick_val) {		
 			index_child_last_pick = i; pick_val = val;
@@ -181,13 +182,13 @@ bool shadow::satisfied(const Clause& c) const {
 int shadow::write_clause(const Clause& c, int index_col, float* array) {
 	if (satisfied(c)) return index_col;
 	for (int i = 0; i < c.size(); i++) {
-        	if (value(c[i]) != l_False) {
-        		int index_row = var(c[i]); int index_z = int(sign(c[i]));
-	        	int index = index_z + index_row * dim2 + index_col * dim1 * dim2;
-        		array[index] = 1.0;
-	            // at the same time, we mark toInt(c[i]) as valid simulation options
-        	    valid[toInt(c[i])] = true;
-       		 }
+    	if (value(c[i]) != l_False) {
+    		int index_row = var(c[i]); int index_z = int(sign(c[i]));
+        	int index = index_z + index_row * dim2 + index_col * dim1 * dim2;
+    		array[index] = 1.0;
+            // at the same time, we mark toInt(c[i]) as valid simulation options
+    	    valid[toInt(c[i])] = true;
+   		}
 	}
 	return index_col + 1;
 }
@@ -281,8 +282,8 @@ void shadow::check_self() const {
             Solver::Watcher watcher = watches[i];
             CRef cr = watcher.cref;
             const Clause& c = get_clause(cr);
-	    if (c[0] != ~key && c[1] != ~key) {
-	    	printf("{{%d}[%d,%d]}", ~key, c[0], c[1]); fflush(stdout);
+    	    if (c[0] != ~key && c[1] != ~key) {
+    	    	printf("{{%d}[%d,%d]}", ~key, c[0], c[1]); fflush(stdout);
     	    }	  
             assert (c[0] == ~key || c[1] == ~key);
         }
@@ -292,13 +293,13 @@ void shadow::check_self() const {
 		vec<Solver::Watcher>& watches = *it.second;
 		Lit 		      key     = toLit(it.first);
 		if (!get_dirty(key)) {
-    			for (int i = 0; i < watches.size(); i++) {
-if (get_clause(watches[i].cref).mark()) {
-	CRef target = watches[i].cref;
-	if (cref_map.count(target) == 0) printf("shadow does not have a copy of this clause\n");
-	else printf("shadow has a copy of this clause\n");
-}
-			assert (!(get_clause(watches[i].cref).mark()) && "clean key has marked clauses!");
+    		for (int i = 0; i < watches.size(); i++) {
+                if (get_clause(watches[i].cref).mark()) {
+                	CRef target = watches[i].cref;
+                	if (cref_map.count(target) == 0) printf("shadow does not have a copy of this clause\n");
+                	else printf("shadow has a copy of this clause\n");
+                }
+			    assert (!(get_clause(watches[i].cref).mark()) && "clean key has marked clauses!");
 			}
 		}
 	} 

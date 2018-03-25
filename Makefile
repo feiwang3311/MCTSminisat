@@ -59,8 +59,8 @@ SOMAJOR=2
 SOMINOR=1
 SORELEASE?=.0#   Declare empty to leave out from library file name.
 
-MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra -std=c++11 -I/usr/include/python3.5m
-MINISAT_LDFLAGS  = -Wall -lz -L/usr/local/lib/ -lgsl -lgslcblas -lm
+MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra -std=c++11 -I/usr/include/python3.5m -I/home/fei/Documents/gsl_fake/include
+MINISAT_LDFLAGS  = -Wall -lz -L/home/fei/Documents/gsl_fake/lib/ -lgsl -lgslcblas -lm
 
 ECHO=@echo
 ifeq ($(VERB),)

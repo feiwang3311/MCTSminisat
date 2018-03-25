@@ -25,7 +25,7 @@ class sat(object):
 
 		self.max_clause = max_clause
 		self.max_var = max_var
-		self.observation_space = np.zeros((max_clause, max_var, 2))
+		self.observation_space = np.zeros((max_clause, max_var, 2), dtype=bool)
 		self.action_space = max_var * 2
 		self.mode = mode
 		if mode.startswith("repeat^"):
@@ -74,14 +74,33 @@ class sat(object):
 		#self.curr_state, self.clause_counter, self.isSolved, self.actionSet = self.parse_state()
 		#return state, self.curr_state
 
+	def resetAt(self, file_no):
+		"""
+			this function reset the minisat by the file_no
+		"""
+		assert (file_no >= 0) and (file_no < self.sat_file_num), "file_no has to be a valid file list index"
+		pickfile = self.sat_files[file_no]
+#		print("{} --> {}".format(file_no, pickfile))
+		state = np.zeros((self.max_clause, self.max_var, 2), dtype = np.float32)
+		self.S = GymSolver(pickfile)
+		if self.S.init(np.reshape(state, (self.max_clause * self.max_var * 2,))):
+			return state
+		else: return None
+
 	def step(self, decision):
 		"""
 			this function makes a step based on the parameter input
+			return true if the SAT problem is finished.
 		"""
+		# no need for returning a state for step function
+		# self.S.step_forward(decision)
+		# return self.S.getDone()
+
+		# It is safe to always assume that the state also needs to be returned
 		self.S.set_decision(decision)
 		state = np.zeros((self.max_clause, self.max_var, 2), dtype = np.float32)
 		self.S.step(np.reshape(state, (self.max_clause * self.max_var * 2,)))
-		return state, self.S.getReward(), self.S.getDone(), {}
+		return self.S.getDone(), state
 		
 	def simulate(self, pi, v):
 		"""
@@ -126,7 +145,6 @@ if __name__ == '__main__':
 	exit(0)
 
 from sat import sat
-from sat import show
 import numpy as np 
 aa = sat("uf20-91")
 state = aa.reset() 
