@@ -59,8 +59,8 @@ SOMAJOR=2
 SOMINOR=1
 SORELEASE?=.0#   Declare empty to leave out from library file name.
 
-MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra -std=c++11 -I/usr/include/python3.6m -I/homes/wang603/RLsat/baseline/baselines/MCTS/GSL/include
-MINISAT_LDFLAGS  = -Wall -lz -L/homes/wang603/RLsat/baseline/baselines/MCTS/GSL/lib -lgsl -lgslcblas -lm
+MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra -std=c++11 -I/usr/include/python3.6m -I./GSL/include
+MINISAT_LDFLAGS  = -Wall -lz -L./GSL/lib -lgsl -lgslcblas -lm
 
 ECHO=@echo
 ifeq ($(VERB),)
