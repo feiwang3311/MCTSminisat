@@ -1,7 +1,7 @@
 #include "minisat/core/Const.h"
 
 const float Hyper_Const::c_act = 0.05854f;    // need a better value here for exploration
-const int Hyper_Const::MCTS_size_lim = 400; // the size of MCT we want to achieve.
+//const int Hyper_Const::MCTS_size_lim = 400; // the size of MCT we want to achieve.
 
 const gsl_rng* Hyper_Const::r = gsl_rng_alloc(gsl_rng_mt19937);
 
