@@ -129,7 +129,6 @@ shadow* shadow::next_to_explore(float* array) {
         Hyper_Const::generate_dirichlet(di);
         for (int i = 0; i < Hyper_Const::nact; i++) {
             pi[i] = pi[i] * 0.75f + ((float)di[i]) * 0.25f;
-            //printf("%f ", (float)di[i]);
         }
         //fflush(stdout); assert(false);
         dirichlet_noise_has_been_added = true;

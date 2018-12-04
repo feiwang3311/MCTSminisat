@@ -59,8 +59,8 @@ SOMAJOR=2
 SOMINOR=1
 SORELEASE?=.0#   Declare empty to leave out from library file name.
 
-MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra -std=c++11 -I/usr/include/python3.5m -I/home/fei/Documents/gsl_fake/include
-MINISAT_LDFLAGS  = -Wall -lz -L/home/fei/Documents/gsl_fake/lib/ -lgsl -lgslcblas -lm
+MINISAT_CXXFLAGS = -I. -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra -std=c++11 -I/usr/include/python3.5m -I/homes/wang603/RLsat/baseline/baselines/MCTS/GSL/include
+MINISAT_LDFLAGS  = -Wall -lz -L/homes/wang603/RLsat/baseline/baselines/MCTS/GSL/lib -lgsl -lgslcblas -lm
 
 ECHO=@echo
 ifeq ($(VERB),)
@@ -200,7 +200,7 @@ python-wrap: $(BUILD_DIR)/dynamic/lib/$(MINISAT_DLIB).$(SOMAJOR).$(SOMINOR)$(SOR
 	g++ -shared -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/dynamic/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so $(MINISAT_LDFLAGS)
 
 python-debug: $(BUILD_DIR)/debug/lib/$(MINISAT_SLIB) $(SRCS) 
-	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.c++ -o minisat/gym/GymSolver_wrap.o $(MINISAT_CXXFLAGS)
+	g++ -O2 -fPIC -c minisat/gym/GymSolver_wrap.c++ -o minisat/gym/GymSolver_wrap.o $(MINISAT_CXXFLAGS) $(MINISAT_LDFLAGS)
 	g++ -shared -fPIC -o minisat/gym/_GymSolver.so $(foreach o,$(OBJS),$(BUILD_DIR)/debug/$(o)) minisat/gym/GymSolver_wrap.o /usr/lib/x86_64-linux-gnu/libz.so $(MINISAT_LDFLAGS)
 
 clean:
